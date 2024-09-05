@@ -2,8 +2,8 @@
  Laboratory practices of Computer Vision in MRGCV program
 
 Authors:
-  Juan Lorente Guarnieri 816020
-  Jaime Bielsa Uche 819033
+ - Juan Lorente Guarnieri 816020
+ - Jaime Bielsa Uche 819033
 
 Practices:
 
