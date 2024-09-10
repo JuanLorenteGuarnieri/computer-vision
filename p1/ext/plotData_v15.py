@@ -119,17 +119,17 @@ if __name__ == '__main__':
 
 
     # Load ground truth
-    R_w_c1 = np.loadtxt('R_w_c1.txt')
-    R_w_c2 = np.loadtxt('R_w_c2.txt')
+    R_w_c1 = np.loadtxt('./p1/ext/R_w_c1.txt')
+    R_w_c2 = np.loadtxt('./p1/ext/R_w_c2.txt')
 
-    t_w_c1 = np.loadtxt('t_w_c1.txt')
-    t_w_c2 = np.loadtxt('t_w_c2.txt')
+    t_w_c1 = np.loadtxt('./p1/ext/t_w_c1.txt')
+    t_w_c2 = np.loadtxt('./p1/ext/t_w_c2.txt')
 
     T_w_c1 = ensamble_T(R_w_c1, t_w_c1)
     T_w_c2 = ensamble_T(R_w_c2, t_w_c2)
 
 
-    K_c = np.loadtxt('K.txt')
+    K_c = np.loadtxt('./p1/ext/K.txt')
 
     X_A = np.array([3.44, 0.80, 0.82])
     X_C = np.array([4.20, 0.60, 0.82])

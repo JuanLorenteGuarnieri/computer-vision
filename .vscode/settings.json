@@ -1,0 +1,10 @@
+{
+  "python.analysis.extraPaths": [
+    "./p1/ext/",
+    "./p2/ext/",
+    "./p3/ext/",
+    "./p4/ext/",
+    "./p5/ext/",
+    "./p6/ext/"
+  ]
+}

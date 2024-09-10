@@ -65,8 +65,8 @@ if __name__ == '__main__':
     # xGT = x_l0 + np.array([[0, -1, 0], [1, 0, 0], [0, 0, 0]]) @ (l_GTNorm * mu)
     # x = xGT + np.diag([1, 1, 0]) @ np.random.normal(0, noiseSigma, (3, len(mu)))
 
-    xGT = np.loadtxt('x2DGTLineFittingSVD.txt')
-    x = np.loadtxt('x2DLineFittingSVD.txt')
+    xGT = np.loadtxt('./p1/ext/x2DGTLineFittingSVD.txt')
+    x = np.loadtxt('./p1/ext/x2DLineFittingSVD.txt')
     plt.plot(xGT[0, :], xGT[1, :], 'b.')
     plt.plot(x[0, :], x[1, :], 'rx')
     plt.draw()
@@ -78,12 +78,30 @@ if __name__ == '__main__':
     u, s, vh = np.linalg.svd(x.T) # svd function returns vh which is the tranpose version of V matrix.
     sM = scAlg.diagsvd(s, u.shape[0], vh.shape[0])  # svd function returns the diagonal s values instead of the S matrix. 
     l_ls = vh[-1, :]
+    
+        
+    # Task 3.1: Fit the least squares solution using only the 2 extreme points from x
+    x_extreme = x[:, [0, -1]]  # Only select the first and last points
+
+    u, s, vh = np.linalg.svd(x_extreme.T)  # Compute SVD
+    l_ls_extreme = vh[-1, :]  # Line coefficients from the last row of vh
+    
+    # Task 3.2: Fit the least squares solution using the original 5 perfect points xGT
+    u_gt, s_gt, vh_gt = np.linalg.svd(xGT.T)  # Compute SVD using xGT
+    l_ls_gt = vh_gt[-1, :]  # Line coefficients from the last row of vh
+
 
     # Notice that the input matrix A of the svd has been decomposed such that A = u @ sM @ vh 
 
     drawLine(l_ls, 'r--', 1)
+    drawLine(l_ls_extreme, 'b--', 2)
+    drawLine(l_ls_gt, 'g--', 2)
+
     plt.draw()
     plt.waitforbuttonpress()
+
+    print("Singular values for 2 extreme points:", s)
+    print("Singular values for ground truth points:", s_gt)
 
 
     ## Project the points on the line using SVD
@@ -94,3 +112,31 @@ if __name__ == '__main__':
     plt.plot(xProjectedOnTheLine[0,:], xProjectedOnTheLine[1, :], 'bx')
     plt.show()
     print('End')
+
+    # Task 3.3: Interpretation of Singular Values
+    # Singular values 𝑠 provide insight into the geometric properties of the points:
+    # In both cases, the matrix is decomposed into matrices 𝑈, 𝑆, and 𝑉 such that the input matrix 𝐴 can be represented as:
+    #             𝐴=𝑈𝑆𝑉^𝑇
+    # Where:
+    #   𝑈 contains the left singular vectors.
+    #   𝑆 is a diagonal matrix containing singular values.
+    #   𝑉 contains the right singular vectors.
+    # When using 2 extreme points:
+    #   The size of the matrices 𝑈, 𝑆, and 𝑉:
+    #     𝑈 is 2×2 because we only have 2 points.
+    #     𝑆 is 2×2, and 𝑉 is 2×3.
+    #   Singular values interpretation:
+    #     One singular value is large (representing the main direction of the points), and one is very small,
+    #     close to zero (indicating that the points are nearly collinear).
+    # When using 5 ground-truth points:
+    #   The size of the matrices 𝑈, 𝑆, and 𝑉:
+    #     𝑈 is 5×5, 𝑆 is 5×5, and 𝑉 is 5×3.
+    #   Singular values interpretation:
+    #     One singular value will be large (capturing the direction of the line), while the rest will be close to zero since the points lie perfectly on the line.
+
+    # Task 3.4: Interpretation of Singular Values
+    # By setting the third singular value to zero, we are enforcing that all points lie exactly on the line.
+    # This essentially removes any noise or deviation from the line, forcing the points to lie on the best-fit line.
+    #
+    # The re-composed matrix using the modified singular values represents the points projected onto the line, i.e.,
+    # the closest points on the line that the noisy points correspond to.
