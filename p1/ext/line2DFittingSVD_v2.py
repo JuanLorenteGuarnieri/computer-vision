@@ -65,8 +65,8 @@ if __name__ == '__main__':
     # xGT = x_l0 + np.array([[0, -1, 0], [1, 0, 0], [0, 0, 0]]) @ (l_GTNorm * mu)
     # x = xGT + np.diag([1, 1, 0]) @ np.random.normal(0, noiseSigma, (3, len(mu)))
 
-    xGT = np.loadtxt('./p1/ext/x2DGTLineFittingSVD.txt')
-    x = np.loadtxt('./p1/ext/x2DLineFittingSVD.txt')
+    xGT = np.loadtxt('./x2DGTLineFittingSVD.txt')
+    x = np.loadtxt('./x2DLineFittingSVD.txt')
     plt.plot(xGT[0, :], xGT[1, :], 'b.')
     plt.plot(x[0, :], x[1, :], 'rx')
     plt.draw()

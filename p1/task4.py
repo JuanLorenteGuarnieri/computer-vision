@@ -18,7 +18,7 @@ plane_eq = vh[-1, :]
 
 
 # Display the plane equation
-print("Ecuación del plano: ", plane_eq)
+print("Plane equation: ", plane_eq)
 
 # Define a function to compute the distance of a point to the plane
 def point_to_plane_distance(plane, point):
