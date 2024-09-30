@@ -8,11 +8,135 @@ sys.path.append(os.path.abspath('./p2/ext'))
 
 import plotData
 
+
+def normalize_points(pts):
+    """
+    Normaliza los puntos para que el centroide esté en el origen y la distancia promedio al origen sea sqrt(2).
+    """
+    mean = np.mean(pts, axis=0)
+    std = np.std(pts)
+    T = np.array([[1/std, 0, -mean[0]/std],
+                  [0, 1/std, -mean[1]/std],
+                  [0, 0, 1]])
+    
+    pts_h = np.column_stack((pts, np.ones(pts.shape[0])))
+    pts_normalized = (T @ pts_h.T).T
+    return pts_normalized[:, :2], T
+
+def compute_fundamental_matrix(x1, x2):
+    """
+    Estima la matriz fundamental usando el método de los 8 puntos.
+    x1, x2: arrays de tamaño Nx2 con las coordenadas de los puntos en ambas imágenes.
+    """
+    # Normalizar los puntos
+    x1_normalized, T1 = normalize_points(x1)
+    x2_normalized, T2 = normalize_points(x2)
+    
+    # Construir la matriz A
+    N = x1_normalized.shape[0]
+    A = np.zeros((N, 9))
+    for i in range(N):
+        x1x = x1_normalized[i, 0]
+        y1x = x1_normalized[i, 1]
+        x2x = x2_normalized[i, 0]
+        y2x = x2_normalized[i, 1]
+        A[i] = [x1x*x2x, x1x*y2x, x1x, y1x*x2x, y1x*y2x, y1x, x2x, y2x, 1]
+    
+    # Resolver Af = 0 usando SVD
+    U, S, Vt = np.linalg.svd(A)
+    F_normalized = Vt[-1].reshape(3, 3)
+    
+    # Imponer la condición de rango 2
+    U, S, Vt = np.linalg.svd(F_normalized)
+    S[2] = 0  # Forzar el tercer valor singular a ser 0
+    F_normalized = U @ np.diag(S) @ Vt
+    
+    # Desnormalizar la matriz fundamental
+    F = T2.T @ F_normalized @ T1
+    
+    return F / F[2, 2]  # Normalizar para que el último elemento sea 1
+
+
+def decompose_essential_matrix(E):
+    """
+    Descompone la matriz esencial E en dos posibles matrices de rotación (R1, R2)
+    y un vector de traslación t.
+    
+    E: Matriz esencial (3x3).
+    
+    Retorna:
+        R1, R2: Dos posibles matrices de rotación (3x3).
+        t: Vector de traslación (3x1).
+    """
+    # SVD de la matriz esencial
+    U, S, Vt = np.linalg.svd(E)
+    
+    # Asegurarse de que E tenga dos valores singulares iguales y uno cercano a cero
+    if np.linalg.det(U) < 0:
+        U[:, -1] *= -1
+    if np.linalg.det(Vt) < 0:
+        Vt[-1, :] *= -1
+    
+    # Matriz auxiliar W (para crear las matrices de rotación)
+    W = np.array([[0, -1, 0],
+                  [1,  0, 0],
+                  [0,  0, 1]])
+    
+    # Posibles soluciones para la rotación
+    R1 = U @ W @ Vt
+    R2 = U @ W.T @ Vt
+    
+    # La traslación es el tercer vector de U
+    t = U[:, 2]
+    
+    # Asegurar que R1 y R2 sean rotaciones válidas (determinante = +1)
+    if np.linalg.det(R1) < 0:
+        R1 = -R1
+    if np.linalg.det(R2) < 0:
+        R2 = -R2
+
+    return R1, R2, t
+
+
+def triangulate_points(P1, P2, pts1, pts2):
+    """
+    Triangula puntos 3D a partir de dos vistas usando las matrices de proyección de las cámaras.
+    P1, P2: Matrices de proyección 3x4 de las dos cámaras.
+    pts1, pts2: Correspondencias de puntos en las dos imágenes.
+    """
+    pts1_h = cv2.convertPointsToHomogeneous(pts1).reshape(-1, 3)[:, :2]
+    pts2_h = cv2.convertPointsToHomogeneous(pts2).reshape(-1, 3)[:, :2]
+
+    pts_4d_h = cv2.triangulatePoints(P1, P2, pts1_h.T, pts2_h.T)
+    pts_3d = pts_4d_h[:3] / pts_4d_h[3]  # Convertir de coordenadas homogéneas a 3D
+    return pts_3d.T
+
+def is_valid_solution(R, t, K, pts1, pts2):
+    """
+    Verifica si una solución (R, t) genera puntos 3D válidos (delante de ambas cámaras).
+    """
+    # Matriz de proyección de la primera cámara (cámara de referencia)
+    P1 = K @ np.hstack((np.eye(3), np.zeros((3, 1))))
+    
+    # Matriz de proyección de la segunda cámara para la solución dada
+    P2 = K @ np.hstack((R, t.reshape(-1, 1)))
+    
+    # Triangular puntos
+    pts_3d = triangulate_points(P1, P2, pts1, pts2)
+    
+    # Verificar si los puntos triangulados están delante de ambas cámaras (coordenada Z positiva)
+    pts_cam1 = pts_3d[:, 2]  # Coordenada Z en la primera cámara
+    pts_cam2 = (R @ pts_3d.T + t.reshape(-1, 1))[2, :]  # Coordenada Z en la segunda cámara
+    
+    # Los puntos son válidos si están delante de ambas cámaras
+    return np.all(pts_cam1 > 0) and np.all(pts_cam2 > 0)
+
 #################### 2.1 Epipolar lines visualization ########################
 # Cargar imágenes y matriz fundamental
 img1 = cv2.cvtColor(cv2.imread('./p2/ext/image1.png'), cv2.COLOR_BGR2RGB)
 img2 = cv2.cvtColor(cv2.imread('./p2/ext/image2.png'), cv2.COLOR_BGR2RGB)
 F_21 = np.loadtxt('./p2/ext/F_21_test.txt')  # Matriz fundamental de prueba
+F_estimated = F_21
 
 # Definir función para dibujar líneas epipolares en la segunda imagen
 def draw_epipolar_line(img2, F, pt1):
@@ -37,16 +161,31 @@ def draw_epipolar_line(img2, F, pt1):
     cv2.line(img2_with_line, (x0, y0), (x1, y1), (255, 0, 0), 2)
     return img2_with_line
 
-# Punto en imagen 1 seleccionado manualmente (o clickeado)
-pt1 = [250, 300]  # Cambiar esto por el punto que elijas
 
-# Dibujar la línea epipolar en la segunda imagen
-img2_with_epipolar_line = draw_epipolar_line(img2, F_21, pt1)
+# Función de callback para el clic del mouse
+def onclick(event):
+    if event.inaxes is not None:
+        pt1 = [int(event.xdata), int(event.ydata)]  # Obtener coordenadas del clic
+        print(f"Punto seleccionado en imagen 1: {pt1}")
+        
+        # Dibujar línea epipolar en la imagen 2
+        img2_with_epipolar_line = draw_epipolar_line(img2, F_estimated, pt1)
+        
+        # Mostrar la imagen 2 con la línea epipolar
+        plt.figure(figsize=(8, 6))
+        plt.imshow(img2_with_epipolar_line)
+        plt.title(f"Línea epipolar en imagen 2 para el punto {pt1} en imagen 1")
+        plt.axis('off')
+        plt.show()
 
-# Mostrar la imagen con la línea epipolar
-plt.imshow(img2_with_epipolar_line)
-plt.title('Línea epipolar en la segunda imagen')
+# Mostrar la imagen 1 y esperar al clic del usuario
+fig, ax = plt.subplots(figsize=(8, 6))
+ax.imshow(img1)
+ax.set_title("Haz clic en un punto de la imagen 1 para generar la línea epipolar en la imagen 2")
+cid = fig.canvas.mpl_connect('button_press_event', onclick)
+
 plt.show()
+
 
 #################### 2.2 Fundamental matrix definition ########################
 # Cargar las matrices de transformación
@@ -54,9 +193,7 @@ T_w_c1 = np.loadtxt('./p2/ext/T_w_c1.txt')
 T_w_c2 = np.loadtxt('./p2/ext/T_w_c2.txt')
 
 # Cargar la matriz intrínseca
-K_c = np.array([[458.654, 0, 367.215],
-                [0, 457.296, 248.375],
-                [0, 0, 1]])
+K_c = np.loadtxt('./p2/ext/K_c.txt')
 
 # Obtener las rotaciones y traslaciones
 R_w_c1 = T_w_c1[:3, :3]
@@ -76,9 +213,19 @@ T_x = np.array([[0, -t_21[2], t_21[1]],
 
 # Calcular la matriz fundamental
 F_21 = np.linalg.inv(K_c.T) @ T_x @ R_21 @ np.linalg.inv(K_c)
+F_estimated = F_21
 
 # Guardar la matriz fundamental
 np.savetxt('./p2/ext/F_21.txt', F_21)
+
+# Visualizar las líneas epipolares usando la matriz estimada
+# (similar al paso 2.1)
+fig, ax = plt.subplots(figsize=(8, 6))
+ax.imshow(img1)
+ax.set_title("Haz clic en un punto de la imagen 1 para generar la línea epipolar en la imagen 2")
+cid = fig.canvas.mpl_connect('button_press_event', onclick)
+
+plt.show()
 
 #################### 2.3 Fundamental matrix linear estimation with eight point solution ########################
 
@@ -86,20 +233,19 @@ np.savetxt('./p2/ext/F_21.txt', F_21)
 x1 = np.loadtxt('./p2/ext/x1Data.txt')
 x2 = np.loadtxt('./p2/ext/x2Data.txt')
 
-# Estimar la matriz fundamental usando el método de los ocho puntos
-F_estimated, mask = cv2.findFundamentalMat(x1.T, x2.T, cv2.FM_8POINT)
+# Estimate the fundamental matrix using the method of the eight points
+F_estimated = compute_fundamental_matrix(x1, x2)
+
+# OpenCV implementation to estimate the fundamental matrix
+# F_estimated, mask = cv2.findFundamentalMat(x1.T, x2.T, cv2.FM_8POINT)
 
 # Visualizar las líneas epipolares usando la matriz estimada
 # (similar al paso 2.1)
-# Punto en imagen 1 seleccionado manualmente (o clickeado)
-pt1 = [250, 300]  # Cambiar esto por el punto que elijas
+fig, ax = plt.subplots(figsize=(8, 6))
+ax.imshow(img1)
+ax.set_title("Haz clic en un punto de la imagen 1 para generar la línea epipolar en la imagen 2")
+cid = fig.canvas.mpl_connect('button_press_event', onclick)
 
-# Dibujar la línea epipolar en la segunda imagen
-img2_with_epipolar_line = draw_epipolar_line(img2, F_estimated, pt1)
-
-# Mostrar la imagen con la línea epipolar
-plt.imshow(img2_with_epipolar_line)
-plt.title('Línea epipolar en la segunda imagen')
 plt.show()
 
 #################### 2.4 Pose estimation from two views ########################
@@ -108,7 +254,10 @@ plt.show()
 E_21 = K_c.T @ F_21 @ K_c
 
 # Descomponer la matriz esencial en R y t
-_, R1, R2, t = cv2.decomposeEssentialMat(E_21)
+R1, R2, t = decompose_essential_matrix(E_21)
+
+# OpenCV function to decompose the matrix
+# _, R1, R2, t = cv2.decomposeEssentialMat(E_21)
 
 # Generar las cuatro posibles soluciones para T_21
 T_21_solutions = [(R1, t), (R1, -t), (R2, t), (R2, -t)]
@@ -116,6 +265,19 @@ T_21_solutions = [(R1, t), (R1, -t), (R2, t), (R2, -t)]
 # Desambiguar la solución correcta triangulando puntos
 # Podemos probar cada combinación (R, t) y seleccionar la que genere puntos 3D delante de ambas cámaras.
 
+# Correspondencias de puntos en ambas imágenes (pts1 y pts2)
+# Estos son los puntos que has detectado en las dos imágenes.
+pts1 = np.array([...])  # Puntos en la imagen 1
+pts2 = np.array([...])  # Puntos en la imagen 2
+
+# Desambiguar la solución correcta
+for i, (R, t) in enumerate(T_21_solutions):
+    if is_valid_solution(R, t, K_c, pts1, pts2):
+        print(f"Solución correcta: R{i + 1}, t{'+' if i % 2 == 0 else '-'}")
+        R_correcta = R
+        t_correcta = t
+        break
+    
 #################### 2.5 Results presentation ########################
 
 # Cargar los puntos 3D de referencia

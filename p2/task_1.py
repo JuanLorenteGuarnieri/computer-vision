@@ -30,5 +30,6 @@ from mpl_toolkits.mplot3d import Axes3D
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
+
 ax.scatter(X_3D[0, :], X_3D[1, :], X_3D[2, :], c='r', marker='o')
 plt.show()
