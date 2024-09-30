@@ -1,35 +1,44 @@
 import numpy as np
 import cv2
-
-# Cargar datos
-K_c = np.array([[458.654, 0, 367.215],
-                [0, 457.296, 248.375],
-                [0, 0, 1]])
-
-T_w_c1 = np.loadtxt('./p2/ext/T_w_c1.txt')
-T_w_c2 = np.loadtxt('./p2/ext/T_w_c2.txt')
-x1 = np.loadtxt('./p2/ext/x1Data.txt')  # (2, N)
-x2 = np.loadtxt('./p2/ext/x2Data.txt')  # (2, N)
-
-# Obtener matrices de proyección P1 y P2
-P1 = K_c @ np.hstack((np.eye(3), np.zeros((3, 1))))  # Matriz de proyección para cámara 1
-P2 = K_c @ T_w_c2[:3, :]  # Matriz de proyección para cámara 2
-
-# Triangulación de puntos
-X_homogeneous = cv2.triangulatePoints(P1, P2, x1, x2)
-
-# Convertir a coordenadas no homogéneas
-X_3D = X_homogeneous[:3, :] / X_homogeneous[3, :]
-
-# Guardar resultados
-np.savetxt('./p2/ext/X_w.txt', X_3D.T)
-
-# Visualización de los puntos 3D triangulados
+import plotData as pd
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+# Load data.
+K_c = np.loadtxt('./p2/ext/K_c.txt')
+T_w_c1 = np.loadtxt('./p2/ext/T_w_c1.txt')
+T_w_c2 = np.loadtxt('./p2/ext/T_w_c2.txt')
+x1 = np.loadtxt('./p2/ext/x1Data.txt')
+x2 = np.loadtxt('./p2/ext/x2Data.txt')
+
+# Get transformation matrices from world to camera (inverting the known ones).
+T_c1_w = np.linalg.inv(T_w_c1)
+T_c2_w = np.linalg.inv(T_w_c2)
+
+# Compute projection matrices P1 and P2.
+P1 = K_c @ T_c1_w[:3, :]
+P2 = K_c @ T_c2_w[:3, :]
+
+# Triangulate points, convert to non-homogeneous coordinates and save them.
+X_hom = cv2.triangulatePoints(P1, P2, x1, x2)
+X_3D = x_hom[:3, :] / x_hom[3, :]
+np.savetxt('./p2/ext/X_w.txt', X_3D.T)
+
+# Visualize triangulated points. Define the figure and the 3D plot.
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
 
-ax.scatter(X_3D[0, :], X_3D[1, :], X_3D[2, :], c='r', marker='o')
+# Plot reference systems and points.
+pd.drawRefSystem(ax, np.eye(4, 4), '-', 'W')
+pd.drawRefSystem(ax, T_w_c1, '-', 'C1')
+pd.drawRefSystem(ax, T_w_c2, '-', 'C2')
+ax.scatter(X_3D[0, :], X_3D[1, :], X_3D[2, :], c='m', marker='.')
+
+# Plot the results.
+ax.set_xlim([0, 4])
+ax.set_ylim([0, 4])
+ax.set_zlim([0, 4])
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
 plt.show()
