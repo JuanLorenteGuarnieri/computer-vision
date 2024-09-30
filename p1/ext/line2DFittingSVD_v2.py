@@ -105,7 +105,7 @@ if __name__ == '__main__':
 
 
     ## Project the points on the line using SVD
-    s[2] = 0  # If all the points are lying on the line s[2] = 0, therefore we impose it
+    s[1] = 0  # If all the points are lying on the line s[2] = 0, therefore we impose it
     xProjectedOnTheLine = (u @ scAlg.diagsvd(s, u.shape[0], vh.shape[0]) @ vh).T
     xProjectedOnTheLine /= xProjectedOnTheLine[2, :]
 

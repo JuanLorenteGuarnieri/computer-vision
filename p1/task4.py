@@ -17,11 +17,17 @@ u, s, vh = np.linalg.svd(points_homogeneous)
 plane_eq = vh[-1, :]
 
 
-# Display the plane equation
-print("Plane equation: ", plane_eq)
 
 # Define a function to compute the distance of a point to the plane
 def point_to_plane_distance(plane, point):
+    """
+    Compute the distance of a point to a plane.
+    Parameters:
+        plane: plane equation coefficients.
+        point: point coordinates.
+    Returns:
+        Distance from the point to the plane.
+    """
     a, b, c, d = plane
     x_p, y_p, z_p = point
     # Calculate the distance using the plane equation
@@ -37,9 +43,19 @@ d_C = point_to_plane_distance(plane_eq, C)
 d_D = point_to_plane_distance(plane_eq, D)
 d_E = point_to_plane_distance(plane_eq, E)
 
+np.set_printoptions(precision=4,linewidth=1024,suppress=True)
+
+# Display the plane equation
+print("TASK 4")
+print()
+print("Plane equation: ")
+print(plane_eq.T)
+
 # Print the distances
-print(f"d_A = {d_A:.2f} m")
-print(f"d_B = {d_B:.2f} m")
-print(f"d_C = {d_C:.2f} m")
-print(f"d_D = {d_D:.2f} m")
-print(f"d_E = {d_E:.2f} m")
+print()
+print("Distances from points to the plane:")
+print(f"A: {d_A:.2f} m")
+print(f"B: {d_B:.2f} m")
+print(f"C: {d_C:.2f} m")
+print(f"D: {d_D:.2f} m")
+print(f"E: {d_E:.2f} m")
