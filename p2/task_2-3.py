@@ -185,8 +185,40 @@ def decompose_essential_matrix(E):
 
     return R1, R2, t
 
-
+# Función de triangulación
 def triangulate_points(P1, P2, pts1, pts2):
+    """
+    Triangula los puntos 3D a partir de dos matrices de proyección y los puntos 2D correspondientes.
+    
+    Args:
+        P1 (np.ndarray): Matriz de proyección de la primera cámara.
+        P2 (np.ndarray): Matriz de proyección de la segunda cámara.
+        pts1 (np.ndarray): Puntos 2D en la primera cámara.
+        pts2 (np.ndarray): Puntos 2D en la segunda cámara.
+        
+    Returns:
+        np.ndarray: Puntos 3D triangulados.
+    """
+    n_points = pts1.shape[0]
+    pts_3d_hom = np.zeros((n_points, 4))
+
+    for i in range(n_points):
+        A = np.array([
+            (pts1[i, 0] * P1[2, :] - P1[0, :]),
+            (pts1[i, 1] * P1[2, :] - P1[1, :]),
+            (pts2[i, 0] * P2[2, :] - P2[0, :]),
+            (pts2[i, 1] * P2[2, :] - P2[1, :])
+        ])
+
+        _, _, Vt = np.linalg.svd(A)
+        pts_3d_hom[i] = Vt[-1]  # El último vector singular
+
+    # Convertir a coordenadas homogéneas (dividir por w)
+    pts_3d = pts_3d_hom[:, :3] / pts_3d_hom[:, 3][:, np.newaxis]
+    
+    return pts_3d
+
+def triangulate_points2(P1, P2, pts1, pts2):
     """
     Triangula puntos 3D a partir de dos vistas usando las matrices de proyección de las cámaras.
     P1, P2: Matrices de proyección 3x4 de las dos cámaras.
@@ -220,6 +252,33 @@ def is_valid_solution(R, t, K, pts1, pts2):
     
     # Los puntos son válidos si están delante de ambas cámaras
     return np.all(pts_cam1 > 0) and np.all(pts_cam2 > 0)
+
+def triangulate_points_from_cameras(R, t, K, pts1, pts2):
+    """
+    Triangula puntos 3D dados dos conjuntos de puntos proyectados en 2D en dos cámaras.
+    
+    Args:
+        R (np.ndarray): Matriz de rotación entre las cámaras.
+        t (np.ndarray): Vector de traslación entre las cámaras.
+        K (np.ndarray): Matriz intrínseca de la cámara.
+        pts1 (np.ndarray): Puntos 2D en la primera cámara.
+        pts2 (np.ndarray): Puntos 2D en la segunda cámara.
+        
+    Returns:
+        np.ndarray: Puntos 3D triangulados.
+    """
+    
+    # Ensamblar las matrices de transformación de las cámaras (inversa para obtener las matrices de proyección)
+    T_c1_w = np.linalg.inv(ensamble_T(R_w_c1, t_w_c1))[:3, :]
+    T_c2_w = np.linalg.inv(ensamble_T(R_w_c2, t_w_c2))[:3, :]
+    # Matrices de proyección
+    P1 = np.dot(K, T_c1_w)
+    P2 = np.dot(K, T_c2_w)
+    
+    # Triangular puntos 3D
+    pts_3d = triangulate_points(P1, P2, pts1, pts2)
+    
+    return pts_3d
 
 #################### 2.1 Epipolar lines visualization ########################
 # Cargar imágenes y matriz fundamental
@@ -367,6 +426,7 @@ E_21 = K_c.T @ F_21 @ K_c
 
 # OpenCV function to decompose the matrix
 R1, R2, t = cv2.decomposeEssentialMat(E_21)
+t=t.ravel()
 
 # Generar las cuatro posibles soluciones para T_21
 T_21_solutions = [(R1, t), (R1, -t), (R2, t), (R2, -t)]
@@ -389,17 +449,27 @@ for i, (R, t) in enumerate(T_21_solutions):
 
 # Save the correct points, transforming them to 3D, into the file.
 
-R_2 = R_w_c1 @ R_correcta
-t_2 = (t_w_c1 + R_w_c1 @ t_correcta).reshape(3,1)
-P1 = K_c @ np.linalg.inv(T_w_c1)[:3, :]
-T_w_c2 = pd.ensamble_T(R_2, t_2)
-P2 = K_c @ T_w_c2[:3, :]
+X_3D = triangulate_points_from_cameras(R_correcta, t_correcta, K_c, pts1, pts2).T
+print("X_3D = ", X_3D.shape)
 
-# P1, P2 = obtain_proyection_matrices(K_c, R_correcta, t_correcta)
-X_hom = cv2.triangulatePoints(P1, P2, x1, x2)
-X_3D = X_hom[:3, :] / X_hom[3, :]
+# R_2 = R_w_c1 @ R_correcta
+# print("t_w_c1 = ", np.atleast_2d(t_w_c1).shape)
+# print("R_w_c1 = ", R_w_c1.shape)
+# print("t_correcta = ", t_correcta.shape)
+# print(" R_w_c1 @ t_correcta = ", ( R_w_c1 @ t_correcta).shape)
+
+# t_2 = (np.atleast_2d(t_w_c1).T + (R_w_c1 @ t_correcta))#.ravel()#.reshape(-1)
+# print("t_2 = ", t_2.shape)
+# P1 = K_c @ np.linalg.inv(T_w_c1)[:3, :]
+# print("P1 = ", P1.shape)
+# T_w_c2_tmp = pd.ensamble_T(R_2, t_2.ravel())
+# P2 = K_c @ T_w_c2_tmp[:3, :]
+
+# # P1, P2 = obtain_proyection_matrices(K_c, R_correcta, t_correcta)
+# X_hom = cv2.triangulatePoints(P1, P2, x1, x2)
+# X_3D = X_hom[:3, :] / X_hom[3, :]
 np.savetxt('./p2/ext/X_triangulated.txt', X_3D.T)
-    
+
 #################### 2.5 Results presentation ########################
 
 # # Cargar los puntos 3D de referencia
@@ -407,15 +477,16 @@ X_w_ref = np.loadtxt('./p2/ext/X_w.txt')  # Puntos 3D de referencia
 
 # # Cargar los puntos 3D obtenidos mediante triangulación
 X_w_triangulated = np.loadtxt('./p2/ext/X_triangulated.txt')  # Puntos 3D triangulados por nosotros
+print("X_w_triangulated = ", X_w_triangulated.shape)
 
 # # Crear figura 3D
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
 
 # # Dibujar los sistemas de referencia de las cámaras
-plotData.drawRefSystem(ax, np.eye(4), '-', 'W')  # Sistema de referencia mundial
-plotData.drawRefSystem(ax, T_w_c1, '-', 'C1')  # Cámara 1
-plotData.drawRefSystem(ax, T_w_c2, '-', 'C2')  # Cámara 2
+pd.drawRefSystem(ax, np.eye(4), '-', 'W')  # Sistema de referencia mundial
+pd.drawRefSystem(ax, T_w_c1, '-', 'C1')  # Cámara 1
+pd.drawRefSystem(ax, T_w_c2, '-', 'C2')  # Cámara 2
 
 # # Dibujar los puntos 3D de referencia
 ax.scatter(X_w_ref[:, 0], X_w_ref[:, 1], X_w_ref[:, 2], c='r', label='Referencia', marker='o')
