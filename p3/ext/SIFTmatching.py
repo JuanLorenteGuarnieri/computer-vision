@@ -46,24 +46,36 @@ def matchesListToIndexMatrix(dMatchesList):
 
 def matchWith2NDRR(desc1, desc2, distRatio, minDist):
     """
-    Nearest Neighbours Matching algorithm checking the Distance Ratio.
-    A match is accepted only if its distance is less than distRatio times
-    the distance to the second match.
+    Nearest Neighbors Matching algorithm checking the Distance Ratio.
+    A match is accepted only if the distance to the nearest neighbor is less than
+    distRatio times the distance to the second nearest neighbor.
     -input:
-        desc1: descriptors from image 1 nDesc x 128
-        desc2: descriptors from image 2 nDesc x 128
-        distRatio:
+        desc1: descriptors from image 1 (nDesc1 x 128)
+        desc2: descriptors from image 2 (nDesc2 x 128)
+        distRatio: distance ratio threshold (0.0 < distRatio < 1.0)
+        minDist: minimum distance threshold to accept a match
     -output:
-       matches: nMatches x 3 --> [[indexDesc1,indexDesc2,descriptorDistance],...]]
+        matches: list of accepted matches with [[indexDesc1, indexDesc2, distance], ...]
     """
     matches = []
     nDesc1 = desc1.shape[0]
+
     for kDesc1 in range(nDesc1):
+        # Compute L2 distance (Euclidean distance) between desc1[kDesc1] and all descriptors in desc2
         dist = np.sqrt(np.sum((desc2 - desc1[kDesc1, :]) ** 2, axis=1))
+
+        # Sort the distances and get the two nearest neighbors
         indexSort = np.argsort(dist)
-        if (dist[indexSort[0]] < minDist):
-            matches.append([kDesc1, indexSort[0], dist[indexSort[0]]])
+        d1 = dist[indexSort[0]]  # Distance to nearest neighbor
+        d2 = dist[indexSort[1]]  # Distance to second nearest neighbor
+
+        # Apply NNDR: check if d1 is less than distRatio * d2
+        if d1 < distRatio * d2 and d1 < minDist:
+            # If the match passes the distance ratio test and is below the minimum distance threshold, accept it
+            matches.append([kDesc1, indexSort[0], d1])
+
     return matches
+
 
 if __name__ == '__main__':
     np.set_printoptions(precision=4, linewidth=1024, suppress=True)
@@ -85,7 +97,30 @@ if __name__ == '__main__':
     keypoints_sift_2, descriptors_2 = sift.detectAndCompute(image_pers_2, None)
 
     distRatio = 0.8
-    minDist = 500
+    minDist = 1000 # higher -> more FN matches (0-100) | smaller -> more FP matches (>1000)
+
+    '''
+    The chessboard image presents a particularly challenging case for feature matching due to image aliasing, a phenomenon
+    where high-frequency patterns (like the alternating black and white squares) become indistinguishable at lower resolutions
+    or when subjected to perspective distortions. Here's why it becomes difficult to remove false positives in this case:
+
+        Repetitive Patterns: The chessboard is a grid of alternating, identical black and white squares, which results in
+        many local areas of the image looking very similar. SIFT, like many feature detectors, relies on local gradients to
+        generate descriptors. However, on a chessboard, multiple patches of the image may generate nearly identical descriptors
+        due to the repeating nature of the pattern. This leads to many ambiguous matches, even when applying the distance ratio criterion.
+
+        Aliasing and Sampling: When the chessboard is viewed at a lower resolution or at an angle, aliasing occurs, which causes
+        neighboring pixels to appear blended. As a result, the SIFT descriptors can be distorted in ways that create matches
+        between points that shouldn't correspond. Even small changes in scale or rotation can lead to dramatic changes in the
+        appearance of the chessboard, leading to confusion in the feature matching process.
+
+        Keypoint Distribution: The edges between the black and white squares are strong feature locations, and SIFT detects
+        many keypoints in these areas. Because so many of the squares' edges look alike, there are often multiple close matches
+        for each keypoint. This high density of keypoints, combined with aliasing, increases the likelihood of false matches.
+        Reducing the false positive rate without eliminating correct matches can be especially hard when the true matches are so
+        visually similar to false ones.
+    '''
+
     matchesList = matchWith2NDRR(descriptors_1, descriptors_2, distRatio, minDist)
     dMatchesList = indexMatrixToMatchesList(matchesList)
     dMatchesList = sorted(dMatchesList, key=lambda x: x.distance)
