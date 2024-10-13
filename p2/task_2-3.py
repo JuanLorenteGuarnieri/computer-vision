@@ -1,49 +1,60 @@
+# Lorente Guarnieri, Juan (NIP 816020)
+# Bielsa Uche, Jaime (NIP 819033)
+# File: task_1.py
+# Date: October 13th, 2024
+# Master in Graphics, Robotics and Computer Vision, Universidad de Zaragoza.
+# Subject: Compuer Vision
+# Description: tasks 2 and 3 of the second practice of the subject.
+
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-
 import sys
 import os
+import plotData as pd
 sys.path.append(os.path.abspath('./p2/ext'))
 
-import plotData as pd
 
-def obtain_proyection_matrices(K, R_correcta, t_correcta):
+def obtain_proyection_matrices(K, R, t):
     """
-    Calcula las matrices de proyección P1 y P2 a partir de la matriz intrínseca, rotación y traslación correctas.
-    
-    :param K: Matriz intrínseca de la cámara (3x3)
-    :param R_correcta: Matriz de rotación correcta (3x3)
-    :param t_correcta: Vector de traslación correcto (3x1)
-    :return: P1 y P2, las matrices de proyección de las dos cámaras
+    Compute the projection matrices P1 and P2 from the intrinsic matrix, rotation and translation.
+    Params:
+        K: Camera intrinsic matrix (3x3).
+        R: Rotation matrix (3x3).
+        t: Translation vector (3x1).
     """
-    # Primera matriz de proyección P1 asume que la cámara 1 está en el origen
+    # First projection matrix P1 assumes camera 1 is at the origin.
+    # Second projection matrix P2 uses the correct rotation and translation.
     P1 = K @ np.hstack((np.eye(3), np.zeros((3, 1))))
-    
-    # Segunda matriz de proyección P2 utiliza la rotación y traslación correctas
-    P2 = K @ np.hstack((R_correcta, t_correcta.reshape(3, 1)))
+    P2 = K @ np.hstack((R, t.reshape(3, 1)))
     
     return P1, P2
+
 
 def compute_homography(K1, K2, R, t, plane_normal, d):
     """
     Compute the homography from the floor plane.
-    K1, K2: Intrinsic camera matrices of camera 1 and 2.
-    R: Rotation matrix from camera 1 to camera 2.
-    t: Translation vector from camera 1 to camera 2.
-    plane_normal: Normal vector of the plane in the first camera frame.
-    d: Distance from the origin to the plane.
+    Params:
+        K1, K2: Intrinsic camera matrices of camera 1 and 2.
+        R: Rotation matrix from camera 1 to camera 2.
+        t: Translation vector from camera 1 to camera 2.
+        plane_normal: Normal vector of the plane in the first camera frame.
+        d: Distance from the origin to the plane.
     """
     t_nT = np.outer(t, plane_normal)
     H = K2 @ (R + t_nT / d) @ np.linalg.inv(K1)
     return H
 
+
 def visualize_point_transfer(H, img1, img2, pts1):
     """
     Visualize point transfer using the estimated homography.
-    H: Homography matrix.
-    img1, img2: The two images.
-    pts1: Points in the first image to transfer.
+    Params:
+        H: Homography matrix.
+        img1, img2: The two images.
+        pts1: Points in the first image to transfer.
+    Returns:
+        pts2: Transferred points in the second image.
     """
     # Convert points to homogeneous coordinates
     pts1_h = cv2.convertPointsToHomogeneous(pts1).reshape(-1, 3)
@@ -68,11 +79,16 @@ def visualize_point_transfer(H, img1, img2, pts1):
     
     plt.show()
 
-def calculate_homography(pts_src, pts_dst):
-    "Implementación de findHomografy"
+    return pts2
+
+
+def compute_homography(pts_src, pts_dst):
+    """
+    findHomography implementation.
+    """
     A = []
     
-    # Creamos matriz como en transparencias
+    # Build the matrix A as seen in the slides.
     for i in range(pts_src.shape[0]):
         x, y = pts_src[i, 0], pts_src[i, 1] 
         u, v = pts_dst[i, 0], pts_dst[i, 1]
@@ -80,47 +96,52 @@ def calculate_homography(pts_src, pts_dst):
         A.append([0, 0, 0, x, y, 1, -v*x, -v*y, -v])
     A = np.array(A)
     
-    # Obtenemos los valores propios
+    # Get the eigen values.
     _, _, V = np.linalg.svd(A)
     H = V[-1, :].reshape((3, 3))
-    H = H / H[2, 2]     # Reescalamos
+
+    # Normalize the homography matrix.
+    H = H / H[2, 2]
 
     return H
 
+
 def normalize_points(pts):
     """
-    Normaliza los puntos para que el centroide esté en el origen y la distancia promedio al origen sea sqrt(2).
+    Normalize points so that the centroid is at the origin and the average distance to the origin is sqrt(2).
     """
-    # Calcular el centroide de los puntos
+    # Get the centroid of the points.
     centroid = np.mean(pts, axis=0)
     
-    # Restar el centroide para trasladar los puntos al origen
+    # Substract the centroid from the points so that the centroid is at the origin.
     pts_shifted = pts - centroid
     
-    # Calcular la distancia promedio de los puntos al origen
+    # Compute the average distance to the origin.
     avg_dist = np.mean(np.linalg.norm(pts_shifted, axis=1))
     
-    # Escalar los puntos para que la distancia promedio sea sqrt(2)
+    # Scale the points so that the average distance is sqrt(2).
     scale = np.sqrt(2) / avg_dist
     pts_normalized = pts_shifted * scale
     
-    # Construir la matriz de transformación
+    # Build and return the transformation matrix.
     T = np.array([[scale, 0, -scale * centroid[0]],
                   [0, scale, -scale * centroid[1]],
                   [0, 0, 1]])
     
     return pts_normalized, T
 
+
 def compute_fundamental_matrix(x1, x2):
     """
-    Estima la matriz fundamental usando el método de los 8 puntos.
-    x1, x2: arrays de tamaño Nx2 con las coordenadas de los puntos en ambas imágenes.
+    Estimate the fundamental matrix using the 8-point algorithm.
+    Params:
+        x1, x2: Corresponding points in the two images.
     """
-    # Normalizar los puntos
+    # Normalie the points.
     x1_normalized, T1 = normalize_points(x1)
     x2_normalized, T2 = normalize_points(x2)
     
-    # Construir la matriz A
+    # Build the matrix A.
     N = x1_normalized.shape[0]
     A = np.zeros((N, 9))
     for i in range(N):
@@ -130,54 +151,52 @@ def compute_fundamental_matrix(x1, x2):
         y2x = x2_normalized[i, 1]
         A[i] = [x1x*x2x, x1x*y2x, x1x, y1x*x2x, y1x*y2x, y1x, x2x, y2x, 1]
     
-    # Resolver Af = 0 usando SVD
+    # Solve Af = 0 using SVD.
     U, S, Vt = np.linalg.svd(A)
     F_normalized = Vt[-1].reshape(3, 3)
     
-    # Imponer la condición de rango 2
+    # Enforce rank 2 constraint.
     U, S, Vt = np.linalg.svd(F_normalized)
-    S[2] = 0  # Forzar el tercer valor singular a ser 0
+    S[2] = 0  # Third singular value is 0.
     F_normalized = U @ np.diag(S) @ Vt
     
-    # Desnormalizar la matriz fundamental
     F = T2.T @ F_normalized @ T1
     
-    return F / F[2, 2]  # Normalizar para que el último elemento sea 1
+    # Normalize the fundamental matrix so that the last element is 1.
+    return F / F[2, 2]
 
 
 def decompose_essential_matrix(E):
     """
-    Descompone la matriz esencial E en dos posibles matrices de rotación (R1, R2)
-    y un vector de traslación t.
-    
-    E: Matriz esencial (3x3).
-    
-    Retorna:
-        R1, R2: Dos posibles matrices de rotación (3x3).
-        t: Vector de traslación (3x1).
+    Decompose the essential matrix E into two possible rotation matrices (R1, R2) and a translation vector t.
+    Params:
+        E: Essential matrix (3x3).
+    Returns:
+        R1, R2: Two possible rotation matrices (3x3).
+        t: Translation vector (3x1).
     """
-    # SVD de la matriz esencial
+    # Essential matrix SVD.
     U, S, Vt = np.linalg.svd(E)
     
-    # Asegurarse de que E tenga dos valores singulares iguales y uno cercano a cero
+    # Check if E has two equal singular values and one of them close to zero.
     if np.linalg.det(U) < 0:
         U[:, -1] *= -1
     if np.linalg.det(Vt) < 0:
         Vt[-1, :] *= -1
     
-    # Matriz auxiliar W (para crear las matrices de rotación)
+    # Aux matrix W.
     W = np.array([[0, -1, 0],
                   [1,  0, 0],
                   [0,  0, 1]])
     
-    # Posibles soluciones para la rotación
+    # Possible rotations.
     R1 = U @ W @ Vt
     R2 = U @ W.T @ Vt
     
-    # La traslación es el tercer vector de U
+    # Translation is the third element of U.
     t = U[:, 2]
     
-    # Asegurar que R1 y R2 sean rotaciones válidas (determinante = +1)
+    # Assure that the rotation matrices are valid (determinant = 1).
     if np.linalg.det(R1) < 0:
         R1 = -R1
     if np.linalg.det(R2) < 0:
@@ -185,19 +204,17 @@ def decompose_essential_matrix(E):
 
     return R1, R2, t
 
-# Función de triangulación
+
 def triangulate_points(P1, P2, pts1, pts2):
     """
-    Triangula los puntos 3D a partir de dos matrices de proyección y los puntos 2D correspondientes.
-    
-    Args:
-        P1 (np.ndarray): Matriz de proyección de la primera cámara.
-        P2 (np.ndarray): Matriz de proyección de la segunda cámara.
-        pts1 (np.ndarray): Puntos 2D en la primera cámara.
-        pts2 (np.ndarray): Puntos 2D en la segunda cámara.
-        
+    Triangulate points in 3D from two sets of corresponding points in two images.
+    Params:
+        P1 (np.ndarray): First camera projection matrix (3x4).
+        P2 (np.ndarray): Second camera projection matrix (3x4).
+        pts1 (np.ndarray): 2D points in the first camera.
+        pts2 (np.ndarray): 2D points in the second camera.
     Returns:
-        np.ndarray: Puntos 3D triangulados.
+        np.ndarray: Triangulated 3D points.
     """
     n_points = pts1.shape[0]
     pts_3d_hom = np.zeros((n_points, 4))
@@ -211,136 +228,140 @@ def triangulate_points(P1, P2, pts1, pts2):
         ])
 
         _, _, Vt = np.linalg.svd(A)
-        pts_3d_hom[i] = Vt[-1]  # El último vector singular
+        pts_3d_hom[i] = Vt[-1]  # Last singular vector is the solution.
 
-    # Convertir a coordenadas homogéneas (dividir por w)
+    # Convert to non-homogeneous coordinates.
     pts_3d = pts_3d_hom[:, :3] / pts_3d_hom[:, 3][:, np.newaxis]
     
     return pts_3d
 
+
 def triangulate_points2(P1, P2, pts1, pts2):
     """
-    Triangula puntos 3D a partir de dos vistas usando las matrices de proyección de las cámaras.
-    P1, P2: Matrices de proyección 3x4 de las dos cámaras.
-    pts1, pts2: Correspondencias de puntos en las dos imágenes.
+    Triangulate points in 3D from two sets of corresponding points in two images.
+    Params:
+        P1 (np.ndarray): First camera projection matrix (3x4).
+        P2 (np.ndarray): Second camera projection matrix (3x4).
+        pts1 (np.ndarray): 2D points in the first camera.
+        pts2 (np.ndarray): 2D points in the second camera.
     """
     pts1_h = cv2.convertPointsToHomogeneous(pts1).reshape(-1, 3)[:, :2]
     pts2_h = cv2.convertPointsToHomogeneous(pts2).reshape(-1, 3)[:, :2]
 
     pts_4d_h = cv2.triangulatePoints(P1, P2, pts1_h.T, pts2_h.T)
-    pts_3d = pts_4d_h[:3] / pts_4d_h[3]  # Convertir de coordenadas homogéneas a 3D
+    pts_3d = pts_4d_h[:3] / pts_4d_h[3]  # Convert from homogeneous to 3D coordinates.
     return pts_3d.T
+
 
 def is_valid_solution(R, t, K, pts1, pts2):
     """
-    Verifica si una solución (R, t) genera puntos 3D válidos (delante de ambas cámaras).
+    Check if a solution (R, t) generates valid 3D points (in front of both cameras).
+    Params:
+        R (np.ndarray): Rotation matrix.
+        t (np.ndarray): Translation vector.
+        K (np.ndarray): Intrinsic camera matrix.
+        pts1 (np.ndarray): Points in the first image.
+        pts2 (np.ndarray): Points in the second image.
     """
-    
     
     T_c1_w = np.linalg.inv(ensamble_T(R_w_c1, t_w_c1))[:3, :]
     T_c2_w = np.linalg.inv(ensamble_T(R_w_c2, t_w_c2))[:3, :]
 
     P1 = np.dot(K, T_c1_w)
-    P2 =np.dot(K, T_c2_w) 
-    
-    # Triangular puntos
+    P2 = np.dot(K, T_c2_w)
+
+    # Triangulate points.
     pts_3d = triangulate_points(P1, P2, pts1, pts2)
-    
-    # Verificar si los puntos triangulados están delante de ambas cámaras (coordenada Z positiva)
-    pts_cam1 = pts_3d[:, 2]  # Coordenada Z en la primera cámara
-    pts_cam2 = (R @ pts_3d.T + t.reshape(-1, 1))[2, :]  # Coordenada Z en la segunda cámara
-    
-    # Los puntos son válidos si están delante de ambas cámaras
+
+    # Check if the points are in front of both cameras (Z coordinate positive).
+    pts_cam1 = pts_3d[:, 2]
+    pts_cam2 = (R @ pts_3d.T + t.reshape(-1, 1))[2, :]
+
+    # Return true if all points are in front of both cameras.
     return np.all(pts_cam1 > 0) and np.all(pts_cam2 > 0)
+
 
 def triangulate_points_from_cameras(R, t, K, pts1, pts2):
     """
-    Triangula puntos 3D dados dos conjuntos de puntos proyectados en 2D en dos cámaras.
-    
-    Args:
-        R (np.ndarray): Matriz de rotación entre las cámaras.
-        t (np.ndarray): Vector de traslación entre las cámaras.
-        K (np.ndarray): Matriz intrínseca de la cámara.
-        pts1 (np.ndarray): Puntos 2D en la primera cámara.
-        pts2 (np.ndarray): Puntos 2D en la segunda cámara.
-        
+    Triangular points 3D, given two sets of points projected in 2D in two cameras.
+    Params:
+        R (np.ndarray): Rotation matrix between the cameras.
+        t (np.ndarray): Translation vector between the cameras.
+        K (np.ndarray): Intrinsic camera matrix.
+        pts1 (np.ndarray): Points in the first camera.
+        pts2 (np.ndarray): Points in the second camera.
     Returns:
-        np.ndarray: Puntos 3D triangulados.
+        np.ndarray: Triangulated 3D points.
     """
-    
-    # Ensamblar las matrices de transformación de las cámaras (inversa para obtener las matrices de proyección)
+    # Get the transformation matrices from the cameras to the world, and their projection matrices.
     T_c1_w = np.linalg.inv(ensamble_T(R_w_c1, t_w_c1))[:3, :]
     T_c2_w = np.linalg.inv(ensamble_T(R_w_c2, t_w_c2))[:3, :]
-    # Matrices de proyección
     P1 = np.dot(K, T_c1_w)
     P2 = np.dot(K, T_c2_w)
     
-    # Triangular puntos 3D
-    pts_3d = triangulate_points(P1, P2, pts1, pts2)
-    
-    return pts_3d
+    return triangulate_points(P1, P2, pts1, pts2)
+
 
 #################### 2.1 Epipolar lines visualization ########################
-# Cargar imágenes y matriz fundamental
+
+# Load images and the fundamental matrix.
 img1 = cv2.cvtColor(cv2.imread('./p2/ext/image1.png'), cv2.COLOR_BGR2RGB)
 img2 = cv2.cvtColor(cv2.imread('./p2/ext/image2.png'), cv2.COLOR_BGR2RGB)
-F_21 = np.loadtxt('./p2/ext/F_21_test.txt')  # Matriz fundamental de prueba
+F_21 = np.loadtxt('./p2/ext/F_21_test.txt') # Testing fundamental matrix.
 F_estimated = F_21
 
-# Definir función para dibujar líneas epipolares en la segunda imagen
+
 def draw_epipolar_line(img2, F, pt1):
     """
-    Dibuja una línea epipolar en img2 correspondiente al punto pt1 en la imagen 1.
+    Draw a epipolar line in img2 corresponding to the point pt1 in image 1.
     """
-    # pt1 en coordenadas homogéneas
-    pt1_h = np.array([pt1[0], pt1[1], 1]).reshape(3, 1)
-    
-    # Obtener la línea epipolar en img2
-    line = F @ pt1_h
-    
-    # Definir extremos de la línea
-    x0, x1 = 0, img2.shape[1]
-    
+
+    pt1_h = np.array([pt1[0], pt1[1], 1]).reshape(3, 1) # Convert to homogeneous coordinates.
+    line = F @ pt1_h                                    # Get the epipolar line in img2.
+    x0, x1 = 0, img2.shape[1]                           # Set the limits of the line.
+
     y0 = int(-line[2].item() / line[1].item())
     y1 = int(-(line[2].item() + line[0].item() * x1) / line[1].item())
 
-    
-    # Dibujar línea
-    img2_with_line = img2.copy()
+    img2_with_line = img2.copy()                        # Drar the line.
     cv2.line(img2_with_line, (x0, y0), (x1, y1), (255, 0, 0), 2)
     return img2_with_line
 
 
-# Función de callback para el clic del mouse
 def onclick(event):
+    """
+    Callback function for the click event.
+    """
     if event.inaxes is not None:
-        pt1 = [int(event.xdata), int(event.ydata)]  # Obtener coordenadas del clic
-        print(f"Punto seleccionado en imagen 1: {pt1}")
-        
-        # Dibujar línea epipolar en la imagen 2
-        img2_with_epipolar_line = draw_epipolar_line(img2, F_estimated, pt1)
-        
-        # Mostrar la imagen 2 con la línea epipolar
-        plt.figure(figsize=(8, 6))
+        pt1 = [int(event.xdata), int(event.ydata)]                              # Get click point coordinates.
+        print(f"Point selected: {event.xdata}, {event.ydata}")                  # Print the selected point.
+        img2_with_epipolar_line = draw_epipolar_line(img2, F_estimated, pt1)    # Draw the epipolar line in img2.
+        plt.figure(figsize=(8, 6))                                              # Show the images with the epipolar line.
         plt.imshow(img2_with_epipolar_line)
-        plt.title(f"Línea epipolar en imagen 2 para el punto {pt1} en imagen 1")
+        plt.title(f"Epipolar line in image 2 for the point {pt1} in image 1")
         plt.axis('off')
         plt.show()
 
-# Mostrar la imagen 1 y esperar al clic del usuario
+# Show the first image and set the click event.
 fig, ax = plt.subplots(figsize=(8, 6))
 ax.imshow(img1)
-ax.set_title("Haz clic en un punto de la imagen 1 para generar la línea epipolar en la imagen 2")
+ax.set_title("Click on a point in image 1 to generate the epipolar line in image 2")
 cid = fig.canvas.mpl_connect('button_press_event', onclick)
 
 plt.show()
 
 
 #################### 2.2 Fundamental matrix definition ########################
-# Ensamble T matrix
+
+# Ensamble T matrix.
 def ensamble_T(R_w_c, t_w_c) -> np.array:
     """
     Ensamble the a SE(3) matrix with the rotation matrix and translation vector.
+    Params:
+        R_w_c: Rotation matrix.
+        t_w_c: Translation vector.
+    Returns:
+        np.array: SE(3) matrix.
     """
     T_w_c = np.zeros((4, 4))
     T_w_c[0:3, 0:3] = R_w_c
@@ -348,193 +369,159 @@ def ensamble_T(R_w_c, t_w_c) -> np.array:
     T_w_c[3, 3] = 1
     return T_w_c
     
-# Cargar las matrices de transformación
+# Load the camera poses and the intrinsic matrix.
 T_w_c1 = np.loadtxt('./p2/ext/T_w_c1.txt')
 T_w_c2 = np.loadtxt('./p2/ext/T_w_c2.txt')
-
-# Cargar la matriz intrínseca
 K_c = np.loadtxt('./p2/ext/K_c.txt')
 
-# Obtener las rotaciones y traslaciones
+# Get the rotation and translation matrices.
 R_w_c1 = T_w_c1[:3, :3]
 t_w_c1 = T_w_c1[:3, 3]
-
 R_w_c2 = T_w_c2[:3, :3]
 t_w_c2 = T_w_c2[:3, 3]
 
-# T_c1_w = np.linalg.inv(ensamble_T(R_w_c1, t_w_c1))[:3, :]
-# T_c2_w = np.linalg.inv(ensamble_T(R_w_c2, t_w_c2))[:3, :]
-
-# Calcular rotación y traslación relativa
+# Compute the relative rotation and translation matrices.
 R_21 = R_w_c2.T @ R_w_c1
 
-# t_21 = t_w_c2 - R_21 @ t_w_c1
+# Compute the relative translation vector.
 T_c2_c1 = np.linalg.inv(T_w_c2) @ T_w_c1
 
+# Get the rotation and translation matrices.
 R_c2_c1 = T_c2_c1[:3, :3]
 t_21 = T_c2_c1[:3, 3]
 
-# Matriz antisimétrica de la traslación
+# Skew-symmetric translation matrix.
 T_x = np.array([[0, -t_21[2], t_21[1]],
                 [t_21[2], 0, -t_21[0]],
                 [-t_21[1], t_21[0], 0]])
 
-# Calcular la matriz fundamental
+# Fundamental matrix estimation.
 F_21 = np.linalg.inv(K_c.T) @ T_x @ R_21 @ np.linalg.inv(K_c)
 F_estimated = F_21
-
-# Guardar la matriz fundamental
 np.savetxt('./p2/ext/F_21.txt', F_21)
 
-# Visualizar las líneas epipolares usando la matriz estimada
-# (similar al paso 2.1)
+# Check the epipolar lines with the same interface as 2.1.
 fig, ax = plt.subplots(figsize=(8, 6))
 ax.imshow(img1)
-ax.set_title("Haz clic en un punto de la imagen 1 para generar la línea epipolar en la imagen 2")
+ax.set_title("Click on a point in image 1 to generate the epipolar line in image 2")
 cid = fig.canvas.mpl_connect('button_press_event', onclick)
 
 plt.show()
+
 
 #################### 2.3 Fundamental matrix linear estimation with eight point solution ########################
 
-# Cargar las correspondencias de puntos
+# Load the point correspondences.
 x1 = np.loadtxt('./p2/ext/x1Data.txt')
 x2 = np.loadtxt('./p2/ext/x2Data.txt')
 
-# Estimate the fundamental matrix using the method of the eight points
-#F_estimated = compute_fundamental_matrix(x1, x2)
-
-# OpenCV implementation to estimate the fundamental matrix
+# OpenCV implementation to estimate the fundamental matrix.
 F_estimated, mask = cv2.findFundamentalMat(x1.T, x2.T, cv2.FM_8POINT)
 
-# Visualizar las líneas epipolares usando la matriz estimada
-# (similar al paso 2.1)
+# Check the epipolar lines with the same interface as 2.1.
 fig, ax = plt.subplots(figsize=(8, 6))
 ax.imshow(img1)
-ax.set_title("Haz clic en un punto de la imagen 1 para generar la línea epipolar en la imagen 2")
+ax.set_title("Click on a point in image 1 to generate the epipolar line in image 2")
 cid = fig.canvas.mpl_connect('button_press_event', onclick)
 
 plt.show()
 
+
 #################### 2.4 Pose estimation from two views ########################
 
-# Cálculo de la matriz esencial
+# Compute the essential matrix.
 E_21 = K_c.T @ F_21 @ K_c
 
-# Descomponer la matriz esencial en R y t
-#R1, R2, t = decompose_essential_matrix(E_21)
-
-# OpenCV function to decompose the matrix
+# OpenCV function to decompose the matrix.
 R1, R2, t = cv2.decomposeEssentialMat(E_21)
 t=t.ravel()
 
-# Generar las cuatro posibles soluciones para T_21
+# Create the possible solutions for T_21.
 T_21_solutions = [(R1, t), (R1, -t), (R2, t), (R2, -t)]
 
-# Desambiguar la solución correcta triangulando puntos
-# Podemos probar cada combinación (R, t) y seleccionar la que genere puntos 3D delante de ambas cámaras.
-
-# Correspondencias de puntos en ambas imágenes (pts1 y pts2)
-# Estos son los puntos que has detectado en las dos imágenes.
+# Get the correct solution among the four possible ones.
 pts1 = x1.T
 pts2 = x2.T
-
-# Desambiguar la solución correcta
 for i, (R, t) in enumerate(T_21_solutions):
     if is_valid_solution(R, t, K_c, pts1, pts2):
-        print(f"Solución correcta: R{i + 1}, t{'+' if i % 2 == 0 else '-'}")
-        R_correcta = R
-        t_correcta = t
+        print(f"Correct answer: R{i + 1}, t{'+' if i % 2 == 0 else '-'}")
+        R_correct = R
+        t_correct = t
         break
 
-# Save the correct points, transforming them to 3D, into the file.
-
-X_3D = triangulate_points_from_cameras(R_correcta, t_correcta, K_c, pts1, pts2).T
-print("X_3D = ", X_3D.shape)
-
-# R_2 = R_w_c1 @ R_correcta
-# print("t_w_c1 = ", np.atleast_2d(t_w_c1).shape)
-# print("R_w_c1 = ", R_w_c1.shape)
-# print("t_correcta = ", t_correcta.shape)
-# print(" R_w_c1 @ t_correcta = ", ( R_w_c1 @ t_correcta).shape)
-
-# t_2 = (np.atleast_2d(t_w_c1).T + (R_w_c1 @ t_correcta))#.ravel()#.reshape(-1)
-# print("t_2 = ", t_2.shape)
-# P1 = K_c @ np.linalg.inv(T_w_c1)[:3, :]
-# print("P1 = ", P1.shape)
-# T_w_c2_tmp = pd.ensamble_T(R_2, t_2.ravel())
-# P2 = K_c @ T_w_c2_tmp[:3, :]
-
-# # P1, P2 = obtain_proyection_matrices(K_c, R_correcta, t_correcta)
-# X_hom = cv2.triangulatePoints(P1, P2, x1, x2)
-# X_3D = X_hom[:3, :] / X_hom[3, :]
+# Transform and save the triangulated points.
+X_3D = triangulate_points_from_cameras(R_correct, t_correct, K_c, pts1, pts2).T
 np.savetxt('./p2/ext/X_triangulated.txt', X_3D.T)
+
 
 #################### 2.5 Results presentation ########################
 
-# # Cargar los puntos 3D de referencia
-X_w_ref = np.loadtxt('./p2/ext/X_w.txt')  # Puntos 3D de referencia
+# Load reference and triangulated points.
+X_w_ref = np.loadtxt('./p2/ext/X_w.txt')
+X_w_triangulated = np.loadtxt('./p2/ext/X_triangulated.txt')
 
-# # Cargar los puntos 3D obtenidos mediante triangulación
-X_w_triangulated = np.loadtxt('./p2/ext/X_triangulated.txt')  # Puntos 3D triangulados por nosotros
-print("X_w_triangulated = ", X_w_triangulated.shape)
-
-# # Crear figura 3D
+# Create the figure and system references.
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
+pd.drawRefSystem(ax, np.eye(4), '-', 'W')   # World.
+pd.drawRefSystem(ax, T_w_c1, '-', 'C1')     # Camera 1.
+pd.drawRefSystem(ax, T_w_c2, '-', 'C2')     # Camera 2.
 
-# # Dibujar los sistemas de referencia de las cámaras
-pd.drawRefSystem(ax, np.eye(4), '-', 'W')  # Sistema de referencia mundial
-pd.drawRefSystem(ax, T_w_c1, '-', 'C1')  # Cámara 1
-pd.drawRefSystem(ax, T_w_c2, '-', 'C2')  # Cámara 2
+# Plot the points over the figure.
+ax.scatter(X_w_ref[:, 0], X_w_ref[:, 1], X_w_ref[:, 2], c='r', label='Reference', marker='o')
+ax.scatter(X_w_triangulated[:, 0], X_w_triangulated[:, 1], X_w_triangulated[:, 2], c='b', label='Triangulated', marker='^')
 
-# # Dibujar los puntos 3D de referencia
-ax.scatter(X_w_ref[:, 0], X_w_ref[:, 1], X_w_ref[:, 2], c='r', label='Referencia', marker='o')
+# Compute the euclidean distance between the reference and the triangulated points, then show the mean and median.
+distances = np.linalg.norm(X_w_ref - X_w_triangulated, axis=1)
 
-# # Dibujar los puntos 3D triangulados
-ax.scatter(X_w_triangulated[:, 0], X_w_triangulated[:, 1], X_w_triangulated[:, 2], c='b', label='Triangulados', marker='^')
+# Show mean and median distances.
+print ("Triangulation acurracy, compared to reference:")
+print (f"Mean distance: {np.mean(distances)}")
+print (f"Median distance: {np.median(distances)}")
 
-# # Etiquetas de los ejes
+# Axis labels, legend, and plot show.
 ax.set_xlabel('X')
 ax.set_ylabel('Y')
 ax.set_zlabel('Z')
-
-# # Mostrar leyenda
 ax.legend()
-
-# # Mostrar la gráfica
 plt.show()
+
 
 #################### 3.1 Homography definition ########################
 
-# Load the point correspondences
+# Load the point correspondences and the plane parameters.
 x1_floor = np.loadtxt('./p2/ext/x1FloorData.txt')[:2, :].T
 x2_floor = np.loadtxt('./p2/ext/x2FloorData.txt')[:2, :].T
-
-# Cargar la normal del plano y la distancia
 Pi_1 = np.loadtxt('./p2/ext/Pi_1.txt')
 n = Pi_1[:3]
 d = Pi_1[-1]
 
-# Calcular la homografía
+# Get the homography matrix.
 H = K_c @ (R_c2_c1 - (t_21.reshape(3,1) @ n.reshape(1,3)) / d) @ np.linalg.inv(K_c)
-print(H)
+print ("3.1 Homography matrix:")
+print (H)
+
 
 #################### 3.2 Point transfer visualization ########################
 
-# Transferir puntos desde la imagen 1 a la imagen 2 usando la homografía
+# Transfer points from image 1 to image 2 using the homography.
 x1_homogeneous = np.vstack([x1, np.ones((1, x1.shape[1]))])
 x2_estimated = H @ x1_homogeneous
 
-# Convertir a coordenadas inhomogéneas
+# Convert to inhomogeneous coordinates.
 x2_estimated /= x2_estimated[2, :]
-visualize_point_transfer(H, img1, img2, x1_floor)
+pts_3_2 = visualize_point_transfer(H, img1, img2, x1_floor)
 
 #################### 3.3 Homography linear estimation from matches ########################
 
 # Estimate the homography
-H_estimated = calculate_homography(x1_floor, x2_floor)
+H_estimated = compute_homography(x1_floor, x2_floor)
 
 # Visualize the point transfer
-visualize_point_transfer(H_estimated, img1, img2, x1_floor)
+pts_3_3 = visualize_point_transfer(H_estimated, img1, img2, x1_floor)
 
+# Compure distance between both results.
+distances = np.linalg.norm(pts_3_2 - pts_3_3, axis=1)
+print ("Estimated homography accuracy, comparing its results with the ones from the computed homography:")
+print (f"Mean distance: {np.mean(distances)}")
+print (f"Median distance: {np.median(distances)}")

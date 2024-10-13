@@ -1,3 +1,12 @@
+# Lorente Guarnieri, Juan (NIP 816020)
+# Bielsa Uche, Jaime (NIP 819033)
+# File: task_1.py
+# Date: October 13th, 2024
+# Master in Graphics, Robotics and Computer Vision, Universidad de Zaragoza.
+# Subject: Compuer Vision
+# Description: task 1 of the second practice of the subject.
+
+
 import numpy as np
 import cv2
 import plotData as pd
@@ -20,7 +29,7 @@ P1 = K_c @ T_c1_w[:3, :]
 P2 = K_c @ T_c2_w[:3, :]
 
 # Triangulate points, convert to non-homogeneous coordinates and save them.
-X_hom = cv2.triangulatePoints(P1, P2, x1, x2)
+x_hom = cv2.triangulatePoints(P1, P2, x1, x2)
 X_3D = x_hom[:3, :] / x_hom[3, :]
 np.savetxt('./p2/ext/X_w.txt', X_3D.T)
 
