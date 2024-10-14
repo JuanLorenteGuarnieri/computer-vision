@@ -3,25 +3,27 @@ import cv2
 import random
 from matplotlib import pyplot as plt
 
-def compute_homography(p1, p2):
+def compute_homography(pts_src, pts_dst):
     """
-    Compute homography matrix H from 4 point correspondences.
-    Args:
-        p1, p2: points from images (Nx2 arrays).
-    Returns:
-        Homography matrix (3x3).
+    findHomography implementation.
     """
     A = []
-    for i in range(4):
-        x1, y1 = p1[i]
-        x2, y2 = p2[i]
-        A.append([-x1, -y1, -1, 0, 0, 0, x1*x2, y1*x2, x2])
-        A.append([0, 0, 0, -x1, -y1, -1, x1*y2, y1*y2, y2])
     
+    # Build the matrix A as seen in the slides.
+    for i in range(pts_src.shape[0]):
+        x, y = pts_src[i, 0], pts_src[i, 1] 
+        u, v = pts_dst[i, 0], pts_dst[i, 1]
+        A.append([x, y, 1, 0, 0, 0, -u*x, -u*y, -u])
+        A.append([0, 0, 0, x, y, 1, -v*x, -v*y, -v])
     A = np.array(A)
-    U, S, Vh = np.linalg.svd(A)
-    H = Vh[-1].reshape(3, 3)
     
+    # Get the eigen values.
+    _, _, V = np.linalg.svd(A)
+    H = V[-1, :].reshape((3, 3))
+
+    # Normalize the homography matrix.
+    H = H / H[2, 2]
+
     return H
 
 def transfer_error(H, p1, p2):

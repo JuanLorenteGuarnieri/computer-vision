@@ -31,7 +31,7 @@ P2 = K_c @ T_c2_w[:3, :]
 # Triangulate points, convert to non-homogeneous coordinates and save them.
 x_hom = cv2.triangulatePoints(P1, P2, x1, x2)
 X_3D = x_hom[:3, :] / x_hom[3, :]
-np.savetxt('./p2/ext/X_w.txt', X_3D.T)
+np.savetxt('./p2/ext/X_w_triangulated.txt', X_3D.T)
 
 # Visualize triangulated points. Define the figure and the 3D plot.
 fig = plt.figure()

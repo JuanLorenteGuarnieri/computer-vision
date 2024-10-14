@@ -264,11 +264,8 @@ def is_valid_solution(R, t, K, pts1, pts2):
         pts2 (np.ndarray): Points in the second image.
     """
     
-    T_c1_w = np.linalg.inv(ensamble_T(R_w_c1, t_w_c1))[:3, :]
-    T_c2_w = np.linalg.inv(ensamble_T(R_w_c2, t_w_c2))[:3, :]
-
-    P1 = np.dot(K, T_c1_w)
-    P2 = np.dot(K, T_c2_w)
+    P1 = K @ np.hstack((np.eye(3), np.zeros((3, 1))))
+    P2 = K @ np.hstack((R, t.reshape(3, 1)))
 
     # Triangulate points.
     pts_3d = triangulate_points(P1, P2, pts1, pts2)
@@ -283,7 +280,7 @@ def is_valid_solution(R, t, K, pts1, pts2):
 
 def triangulate_points_from_cameras(R, t, K, pts1, pts2):
     """
-    Triangular points 3D, given two sets of points projected in 2D in two cameras.
+    Triangulate points 3D, given two sets of points projected in 2D in two cameras.
     Params:
         R (np.ndarray): Rotation matrix between the cameras.
         t (np.ndarray): Translation vector between the cameras.
@@ -293,12 +290,10 @@ def triangulate_points_from_cameras(R, t, K, pts1, pts2):
     Returns:
         np.ndarray: Triangulated 3D points.
     """
-    # Get the transformation matrices from the cameras to the world, and their projection matrices.
-    T_c1_w = np.linalg.inv(ensamble_T(R_w_c1, t_w_c1))[:3, :]
-    T_c2_w = np.linalg.inv(ensamble_T(R_w_c2, t_w_c2))[:3, :]
-    P1 = np.dot(K, T_c1_w)
-    P2 = np.dot(K, T_c2_w)
-    
+
+    P1 = K @ np.hstack((np.eye(3), np.zeros((3, 1))))
+    P2 = K @ np.hstack((R, t.reshape(3, 1)))
+
     return triangulate_points(P1, P2, pts1, pts2)
 
 
@@ -444,20 +439,21 @@ pts1 = x1.T
 pts2 = x2.T
 for i, (R, t) in enumerate(T_21_solutions):
     if is_valid_solution(R, t, K_c, pts1, pts2):
-        print(f"Correct answer: R{i + 1}, t{'+' if i % 2 == 0 else '-'}")
+        print(f"Correct answer: R{(i//2)+1}, t{'+' if i % 2 == 0 else '-'}")
         R_correct = R
         t_correct = t
         break
 
 # Transform and save the triangulated points.
 X_3D = triangulate_points_from_cameras(R_correct, t_correct, K_c, pts1, pts2).T
+X_3D = T_w_c1 @ np.vstack([X_3D, np.ones((1, X_3D.shape[1]))])
 np.savetxt('./p2/ext/X_triangulated.txt', X_3D.T)
 
 
 #################### 2.5 Results presentation ########################
 
 # Load reference and triangulated points.
-X_w_ref = np.loadtxt('./p2/ext/X_w.txt')
+X_w_ref = np.loadtxt('./p2/ext/X_w.txt').T
 X_w_triangulated = np.loadtxt('./p2/ext/X_triangulated.txt')
 
 # Create the figure and system references.
@@ -472,7 +468,7 @@ ax.scatter(X_w_ref[:, 0], X_w_ref[:, 1], X_w_ref[:, 2], c='r', label='Reference'
 ax.scatter(X_w_triangulated[:, 0], X_w_triangulated[:, 1], X_w_triangulated[:, 2], c='b', label='Triangulated', marker='^')
 
 # Compute the euclidean distance between the reference and the triangulated points, then show the mean and median.
-distances = np.linalg.norm(X_w_ref - X_w_triangulated, axis=1)
+distances = np.linalg.norm(X_w_ref[:, :3] - X_w_triangulated[:, :3], axis=1)
 
 # Show mean and median distances.
 print ("Triangulation acurracy, compared to reference:")
