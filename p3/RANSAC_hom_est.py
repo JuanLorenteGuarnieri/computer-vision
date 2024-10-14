@@ -5,9 +5,11 @@ from matplotlib import pyplot as plt
 
 def compute_homography(p1, p2):
     """
-    Compute homography matrix H from 4 point correspondences
-    p1: points from image 1 (Nx2 array)
-    p2: points from image 2 (Nx2 array)
+    Compute homography matrix H from 4 point correspondences.
+    Args:
+        p1, p2: points from images (Nx2 arrays).
+    Returns:
+        Homography matrix (3x3).
     """
     A = []
     for i in range(4):
@@ -24,10 +26,12 @@ def compute_homography(p1, p2):
 
 def transfer_error(H, p1, p2):
     """
-    Compute the transfer error between points transformed by homography
-    H: homography matrix
-    p1: points from image 1 (Nx2 array)
-    p2: points from image 2 (Nx2 array)
+    Compute the transfer error between points transformed by homography.
+    Args:
+        H: homography matrix
+        p1, p2: points from images (Nx2 arrays).
+    Returns:
+        Transfer error for each point.
     """
     p1_homogeneous = np.hstack((p1, np.ones((p1.shape[0], 1))))
     p2_projected = (H @ p1_homogeneous.T).T
@@ -38,10 +42,14 @@ def transfer_error(H, p1, p2):
 
 def ransac_homography(matches1, matches2, num_iterations=1000, threshold=5):
     """
-    Perform RANSAC to estimate a homography matrix
-    matches1, matches2: Matched points between two images (Nx2 arrays)
-    num_iterations: Number of RANSAC iterations
-    threshold: Transfer error threshold to classify inliers
+    Perform RANSAC to estimate a homography matrix.
+    Args:
+        matches1, matches2: Matched points between two images (Nx2 arrays).
+        num_iterations: Number of RANSAC iterations.
+        threshold: Transfer error threshold to classify inliers.
+    Returns:
+        best_H: Homography matrix with the most inliers.
+        best_inliers: List of indices of inliers.
     """
     num_points = matches1.shape[0]
     best_inliers = []
@@ -77,7 +85,11 @@ def ransac_homography(matches1, matches2, num_iterations=1000, threshold=5):
 
 def draw_matches(img1, img2, matches1, matches2, inliers):
     """
-    Display matches and inliers between two images
+    Display matches and inliers between two images.
+    Args:
+        img1, img2: Input images.
+        matches1, matches2: Matched points between two images (Nx2 arrays).
+        inliers: List of indices of inliers.
     """
     h1, w1 = img1.shape[:2]
     h2, w2 = img2.shape[:2]
