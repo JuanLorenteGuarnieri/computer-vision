@@ -146,28 +146,30 @@ def draw_epipolar_lines(img1, img2, matches1, matches2, F):
     """
     Draw epipolar lines on the images corresponding to the points
     """
-    def draw_lines(img, lines, pts):
+    def draw_lines(img, lines, pts, colors):
         ''' img - image on which we draw the epilines for the points in img2
             lines - corresponding epilines '''
         r, c = img.shape[:2]
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-        for r, pt in zip(lines, pts):
-            color = tuple(np.random.randint(0, 255, 3).tolist())
+        for r, pt, color in zip(lines, pts, colors):
             x0, y0 = map(int, [0, -r[2] / r[1]])
             x1, y1 = map(int, [c, -(r[2] + r[0] * c) / r[1]])
             img = cv2.line(img, (x0, y0), (x1, y1), color, 1)
-            img = cv2.circle(img, tuple(map(int, pt)), 5, color, -1)  # Fixed line
+            img = cv2.circle(img, tuple(map(int, pt)), 5, color, -1)
         return img
 
+    # Generate a random colro for each line
+    num_lines = matches1.shape[0]
+    colors = [tuple(np.random.randint(0, 255, 3).tolist()) for _ in range(num_lines)]
 
     # Compute the epipolar lines in both images
     lines1 = cv2.computeCorrespondEpilines(matches2.reshape(-1, 1, 2), 2, F)
     lines1 = lines1.reshape(-1, 3)
-    img1_with_lines = draw_lines(img1, lines1, matches1)
+    img1_with_lines = draw_lines(img1, lines1, matches1, colors)
 
     lines2 = cv2.computeCorrespondEpilines(matches1.reshape(-1, 1, 2), 1, F)
     lines2 = lines2.reshape(-1, 3)
-    img2_with_lines = draw_lines(img2, lines2, matches2)
+    img2_with_lines = draw_lines(img2, lines2, matches2, colors)
 
     plt.subplot(121), plt.imshow(img1_with_lines)
     plt.subplot(122), plt.imshow(img2_with_lines)
@@ -187,7 +189,7 @@ def compute_epipolar_lines(F, points):
     lines = (F @ points_h.T).T  # Epipolar lines
     return lines
 
-def guided_matching(matches1, matches2, F, threshold=1.0):
+def guided_matching(matches1, matches2, F, threshold=3.0):
     """
     Perform guided matching using the epipolar geometry
     matches1: Nx2 array of points from image 1
@@ -236,15 +238,17 @@ if __name__ == "__main__":
 
     if args.useSuperGlue:
         path = './ext/image1_image2_matches.npz'
-        npz = np.load(path)
+        npz = np.load(path) # Load dictionary with super point
+        # Create a boolean mask with True for keypoints with a good match, and False for the rest
+        mask = npz['matches'] > -1
+        
+        # Using the boolean mask, select the indexes of matched keypoints from image 2
+        idxs = npz['matches'][mask]
+        # Using the boolean mask, select the keypoints from image 1 with a good match
+        matches1 = npz['keypoints0'][mask]
+        matches2 = npz['keypoints1'][idxs]
         descriptors1 = npz['descriptors0']
         descriptors2 = npz['descriptors1']
-        keypoints1 = npz['keypoints0']
-        keypoints2 = npz['keypoints1']
-        matches = npz['matches']
-        print(matches)
-        matches1 = np.array([matches[m[0]] for m in matches])
-        matches2 = np.array([matches[m[1]] for m in matches])
     else:
         # Detect features using SIFT and match (for demo purposes)
         sift = cv2.SIFT_create()
