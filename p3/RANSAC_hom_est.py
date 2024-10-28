@@ -7,6 +7,10 @@ from matplotlib import pyplot as plt
 def compute_homography(pts_src, pts_dst):
     """
     findHomography implementation.
+    Args:
+        pts_src, pts_dst: Source and destination points (Nx2 arrays).
+    Returns:
+        Homography matrix H.
     """
     A = []
     

@@ -71,9 +71,9 @@ def compute_fundamental_matrix(x1, x2):
 
 def point_line_distance(F, p1, p2):
     """
-    Compute the distance from point to epipolar line
+    Compute the distance from point to epipolar line.
     Args:
-        F: fundamental matrix
+        F: fundamental matrix.
         p1, p2: points from images (Nx2 array).
     Returns:
         dist: distance from points to epipolar lines.
@@ -96,6 +96,13 @@ def point_line_distance(F, p1, p2):
 def ransac_fundamental_matrix(matches1, matches2, num_iterations=10000, threshold=3):
     """
     Perform RANSAC to estimate the fundamental matrix.
+    Args:
+        matches1, matches2: Corresponding points in the two images.
+        num_iterations: Number of RANSAC iterations.
+        threshold: Distance threshold for inliers.
+    Returns:
+        F: Fundamental matrix.
+        inliers: Inliers corresponding to the fundamental matrix.
     """
     num_points = matches1.shape[0]
     best_inliers = []
@@ -142,13 +149,22 @@ def ransac_fundamental_matrix(matches1, matches2, num_iterations=10000, threshol
     
     return best_F, best_inliers
 
-def draw_epipolar_lines(img1, img2, matches1, matches2, F):
+def draw_epipolar_lines(img1, img2, matches1, matches2, F, refined_matches=None):
     """
     Draw epipolar lines on the images corresponding to the points
+    Args:
+        img1, img2: Images
+        matches1, matches2: Corresponding points in the two images
+        F: Fundamental matrix
     """
     def draw_lines(img, lines, pts, colors):
-        ''' img - image on which we draw the epilines for the points in img2
-            lines - corresponding epilines '''
+        '''
+        Draw the epilines for the points in one image over the other image.
+            img - image on which we draw the epilines for the points in img2.
+            lines - corresponding epilines.
+            pts - corresponding points.
+            color - color of the epilines.
+        '''
         r, c = img.shape[:2]
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
         for r, pt, color in zip(lines, pts, colors):
@@ -171,6 +187,14 @@ def draw_epipolar_lines(img1, img2, matches1, matches2, F):
     lines2 = lines2.reshape(-1, 3)
     img2_with_lines = draw_lines(img2, lines2, matches2, colors)
 
+    if refined_matches is not None:
+        print ("Drawing refined matches, ", refined_matches.shape)
+        for i in range(refined_matches.shape[0]):
+            color = tuple(np.random.randint(0, 255, 3).tolist())
+            # draw a cross on the points
+            img1_with_lines = cv2.drawMarker(img1_with_lines, (int(refined_matches[i, 0, 0]), int(refined_matches[i, 0, 1])), color, markerType=cv2.MARKER_CROSS, markerSize=10, thickness=2, line_type=cv2.LINE_AA)
+            img2_with_lines = cv2.drawMarker(img2_with_lines, (int(refined_matches[i, 1, 0]), int(refined_matches[i, 1, 1])), color, markerType=cv2.MARKER_CROSS, markerSize=10, thickness=2, line_type=cv2.LINE_AA)
+
     plt.subplot(121), plt.imshow(img1_with_lines)
     plt.subplot(122), plt.imshow(img2_with_lines)
     plt.show()
@@ -180,10 +204,12 @@ import cv2
 
 def compute_epipolar_lines(F, points):
     """
-    Compute the epipolar lines corresponding to points in the other image
-    F: Fundamental matrix
-    points: Nx2 array of points in one image
-    Returns: Epipolar lines corresponding to points in the other image
+    Compute the epipolar lines corresponding to points in the other image.
+    Args:
+        F: Fundamental matrix.
+        points: Nx2 array of points in one image.
+    Returns:
+        Epipolar lines corresponding to points in the other image.
     """
     points_h = np.hstack((points, np.ones((points.shape[0], 1))))
     lines = (F @ points_h.T).T  # Epipolar lines
@@ -192,10 +218,13 @@ def compute_epipolar_lines(F, points):
 def guided_matching(matches1, matches2, F, threshold=3.0):
     """
     Perform guided matching using the epipolar geometry
-    matches1: Nx2 array of points from image 1
-    matches2: Nx2 array of points from image 2
-    F: Fundamental matrix
-    threshold: Distance threshold for epipolar constraint
+    Args:
+        matches1: Nx2 array of points from image 1.
+        matches2: Nx2 array of points from image 2.
+        F: Fundamental matrix.
+        threshold: Distance threshold for epipolar constraint.
+    Returns:
+        Refined matches after guided matching.
     """
     lines1 = compute_epipolar_lines(F.T, matches2)  # Epipolar lines in image 1 for points in image 2
     lines2 = compute_epipolar_lines(F, matches1)    # Epipolar lines in image 2 for points in image 1
@@ -292,5 +321,5 @@ if __name__ == "__main__":
     elif not F.shape == (3, 3):
         print("Error: Fundamental matrix F is not 3x3.")
     else:
-        draw_epipolar_lines(img1, img2, matches1[inliers], matches2[inliers], F)
+        draw_epipolar_lines(img1, img2, matches1[inliers], matches2[inliers], F, refined_matches)
 
