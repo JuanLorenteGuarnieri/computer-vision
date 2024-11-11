@@ -74,8 +74,8 @@ def resBundleProjection(Op, x1Data, x2Data, K_c, nPoints):
     x2_proj /= x2_proj[2]              # Normalize to homogeneous coordinates
 
     # Calculate residuals as the difference between observed and projected points
-    residual_x1 = (x1Data[:2] - x1_proj[:2])
-    residual_x2 = (x2Data[:2] - x2_proj[:2])
+    residual_x1 = (x1Data[:2] - x1_proj[:2]) * (x1Data[:2] - x1_proj[:2])   # Difference for image 1
+    residual_x2 = (x2Data[:2] - x2_proj[:2]) * (x2Data[:2] - x2_proj[:2])   # Difference for image 2
 
     # Concatenate and return residuals as a flat array
     residuals = np.hstack((residual_x1, residual_x2)).flatten()
@@ -682,7 +682,6 @@ T_wc2_opt[:3, 3] = t_opt
 scale_factor = np.linalg.norm(R_correct) / np.linalg.norm(R_opt)
 scale_factor = np.linalg.norm(t_correct) / np.linalg.norm(t_opt)
 t_opt_scaled = t_opt * scale_factor
-print("np.linalg.norm(t_correct): ",np.linalg.norm(t_correct))
 print("Scale factor: ", scale_factor)
 T_wc2_opt *= scale_factor
 
@@ -844,9 +843,9 @@ def resBundleProjection(Op, x1Data, x2Data, x3Data, K_c, nPoints):
     x3_proj /= x3_proj[2]
 
     # Calculate residuals for all three views
-    residual_x1 = (x1Data[:2] - x1_proj[:2])
-    residual_x2 = (x2Data[:2] - x2_proj[:2])
-    residual_x3 = (x3Data[:2] - x3_proj[:2])
+    residual_x1 = (x1Data[:2] - x1_proj[:2]) * (x1Data[:2] - x1_proj[:2])
+    residual_x2 = (x2Data[:2] - x2_proj[:2]) * (x2Data[:2] - x2_proj[:2])
+    residual_x3 = (x3Data[:2] - x3_proj[:2]) * (x3Data[:2] - x3_proj[:2])
 
     # Concatenate all residuals
     residuals = np.hstack((residual_x1, residual_x2, residual_x3)).flatten()
@@ -871,7 +870,7 @@ def bundle_adjustment_3views(x1Data, x2Data, x3Data, K_c, T_init_21, T_init_31, 
     initial_params = np.hstack([T_init_21[:3], T_init_21[3:], T_init_31[:3], T_init_31[3:], X_init.T.flatten()])
     
     # Run bundle adjustment optimization
-    result = least_squares(resBundleProjection, initial_params, args=(x1Data, x2Data, x3Data, K_c, X_in.shape[1]), method='lm')
+    result = least_squares(resBundleProjection, initial_params, args=(x1Data, x2Data, x3Data, K_c, X_in.shape[1]), method='trf')
 
     # Retrieve optimized parameters and scale results
     Op_opt = result.x
@@ -900,12 +899,10 @@ T_init2 = np.hstack([theta_init, t_init])
 T_init3 = np.hstack([crossMatrixInv(logm(R_w_c3_pnp.astype('float64'))), t_w_c3_pnp])
 
 # Ejecutamos el ajuste de bundle adjustment
-R_opt2, t_opt2, R_opt3, t_opt3, X_opt = bundle_adjustment_3views(x1, x2, x3, K_c, T_init2, T_init3, (X_w_triangulated @ T_w_c1).T,T_c2_c1)
+R_opt2, t_opt2, R_opt3, t_opt3, X_opt = bundle_adjustment_3views(x1, x2, x3, K_c, T_init2, T_init3, (X_w_triangulated @ T_w_c1).T, T_w_c2)
 
 X_3D = triangulate_points_from_cameras(R_opt2, t_opt2, K_c, pts1, pts2).T
-X_3D = np.vstack([X_3D, np.ones((1, X_3D.shape[1]))])
-
-X_3D_w = T_w_c1 @ X_3D
+X_3D = T_w_c1 @ np.vstack([X_3D, np.ones((1, X_3D.shape[1]))])
 
 print("initial_theta: " + str(R_correct))
 print("optimized_theta: " + str(R_opt))
@@ -924,7 +921,7 @@ pd.drawRefSystem(ax, T_w_c2, '-', 'C2')     # Camera 2.
 # Plot the points over the figure.
 ax.scatter(X_w_ref[:, 0], X_w_ref[:, 1], X_w_ref[:, 2], c='r', label='Reference', marker='o')
 ax.scatter(X_w_triangulated[:, 0], X_w_triangulated[:, 1], X_w_triangulated[:, 2], c='b', label='Triangulated', marker='^')
-ax.scatter(X_3D_w.T[:, 0], X_3D_w.T[:, 1], X_3D_w.T[:, 2], c='g', label='Triangulated_opt', marker='^')
+ax.scatter(X_3D.T[:, 0], X_3D.T[:, 1], X_3D.T[:, 2], c='g', label='Triangulated_opt', marker='^')
 
 # Compute the euclidean distance between the reference and the triangulated points, then show the mean and median.
 distances = np.linalg.norm(X_w_ref[:, :3] - X_w_triangulated[:, :3], axis=1)
