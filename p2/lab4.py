@@ -614,6 +614,8 @@ R_opt, t_opt, X_opt = bundle_adjustment(x1, x2, K_c, T_init, (X_w_triangulated @
 X_3D = triangulate_points_from_cameras(R_opt, t_opt, K_c, pts1, pts2).T
 X_3D = T_w_c1 @ np.vstack([X_3D, np.ones((1, X_3D.shape[1]))])
 
+# X_3D = np.vstack([X_opt.T, np.ones((1, X_opt.T.shape[1]))])
+
 print("initial_theta: " + str(R_correct))
 print("optimized_theta: " + str(R_opt))
 print("initial_t_21: " + str(t_correct))
@@ -683,18 +685,24 @@ t_opt_scaled = t_opt * scale_factor
 print("Scale factor: ", scale_factor)
 T_wc2_opt *= scale_factor
 
+T_w_c3 = np.loadtxt('./p2/ext/T_w_c3.txt')
+
 # Proyectar los puntos optimizados en cada imagen usando T_wc1, T_wc2_opt
 x1_p_opt = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c1) @ X_3D
 x2_p_opt = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c2) @ X_3D
+x3_p_opt = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c3) @ X_3D
 # x2_p_opt = K_c @ np.eye(3, 4) @ np.linalg.inv(T_wc2_opt) @ X_3D
 
 x1_p = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c1) @ X_w_ref.T
 x2_p = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c2) @ X_w_ref.T
+x3_p = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c3) @ X_w_ref.T
 # Normalizar las coordenadas para obtener las proyecciones en píxeles
 x1_p_opt /= x1_p_opt[2, :]
 x2_p_opt /= x2_p_opt[2, :]
+x3_p_opt /= x3_p_opt[2, :]
 x1_p /= x1_p[2, :]
 x2_p /= x2_p[2, :]
+x3_p /= x3_p[2, :]
     
     
 # Imagen 1
@@ -720,15 +728,29 @@ plt.plot(x2[0, :], x2[1, :], 'rx')
 plotNumberedImagePoints(x2[0:2, :], 'r', 4)
 plt.legend()
 plt.title('Image 2')
-plt.show()
 
+x3 = np.loadtxt('./p2/ext/x3Data.txt')
+
+img3 = cv2.cvtColor(cv2.imread('./p2/ext/image3.png'), cv2.COLOR_BGR2RGB)
+
+# Imagen 3
+plt.figure(6)
+plt.imshow(img3, cmap='gray', vmin=0, vmax=255)
+plotResidual(x3, x3_p, 'k-')
+plotResidual(x3, x3_p_opt, 'k-')  # Residuals optimizado
+plt.plot(x3_p[0, :], x3_p[1, :], 'bo', label='Original Projection')
+plt.plot(x3_p_opt[0, :], x3_p_opt[1, :], 'go', label='Optimized Projection')
+plt.plot(x3[0, :], x3[1, :], 'rx')
+plotNumberedImagePoints(x3[0:2, :], 'r', 4)
+plt.legend()
+plt.title('Image 3')
+plt.show()
 
 
 ########################################################################
 ################### LAB 4 3.0 Perspective-N-Point #######################
 ########################################################################
 
-x3 = np.loadtxt('./p2/ext/x3Data.txt')
 # Convert the 3D points to (n, 1, 2) format as required by solvePnP
 imagePoints1 = np.ascontiguousarray(x1[0:2, :].T).reshape((x1.shape[1], 1, 2))  # (nPoints, 1, 2)
 imagePoints2 = np.ascontiguousarray(x2[0:2, :].T).reshape((x2.shape[1], 1, 2))  # (nPoints, 1, 2)
@@ -759,7 +781,6 @@ T_w_c3_pnp = np.eye(4)
 T_w_c3_pnp[:3, :3] = R_w_c3_pnp
 T_w_c3_pnp[:3, 3] = -(T_w_c1[:3, :3] @ t_w_c3_pnp)
 
-T_w_c3 = np.loadtxt('./p2/ext/T_w_c3.txt')
 
 # Create the figure and system references.
 fig = plt.figure()
@@ -775,3 +796,215 @@ plt.show()
 ###################### LAB 4 4.0 three views ##########################
 ########################################################################
 
+def resBundleProjection(Op, x1Data, x2Data, x3Data, K_c, nPoints):
+    """
+    Calculate the reprojection residuals for bundle adjustment using three views.
+    
+    Parameters:
+        Op (array): Optimization parameters including T_21, T_31 (rotation and translation between views) 
+                    and X1 (3D points in reference frame 1).
+        x1Data (array): (3 x nPoints) 2D points in image 1 (homogeneous coordinates).
+        x2Data (array): (3 x nPoints) 2D points in image 2 (homogeneous coordinates).
+        x3Data (array): (3 x nPoints) 2D points in image 3 (homogeneous coordinates).
+        K_c (array): (3 x 3) intrinsic calibration matrix.
+        nPoints (int): Number of 3D points.
+        
+    Returns:
+        res (array): Residuals, which are the errors between the observed 2D matched points 
+                     and the projected 3D points across all views.
+    """
+    # Extract rotation (theta) and translation (t) for T_21 and T_31
+    theta_21 = Op[:3]                  # Rotation vector for T_21
+    t_21 = Op[3:6]                     # Translation vector for T_21
+    theta_31 = Op[6:9]                 # Rotation vector for T_31
+    t_31 = Op[9:12]                    # Translation vector for T_31
+    X1 = Op[12:].reshape((nPoints, 3)) # 3D points (each with 3 coordinates)
+
+    # Compute rotation matrices from rotation vectors using exponential map
+    R_21 = expm(crossMatrix(theta_21)) # Compute R_21 from theta_21
+    R_31 = expm(crossMatrix(theta_31)) # Compute R_31 from theta_31
+
+    # Project 3D points to image 1 (camera 1)
+    x1_proj = K_c @ X1.T
+    x1_proj /= x1_proj[2]
+
+    # Transform points to frame 2
+    X2 = (R_21 @ X1.T).T + t_21
+
+    # Project transformed points to image 2 (camera 2)
+    x2_proj = K_c @ X2.T
+    x2_proj /= x2_proj[2]
+
+    # Transform points to frame 3
+    X3 = (R_31 @ X1.T).T + t_31
+
+    # Project transformed points to image 3 (camera 3)
+    x3_proj = K_c @ X3.T
+    x3_proj /= x3_proj[2]
+
+    # Calculate residuals for all three views
+    residual_x1 = (x1Data[:2] - x1_proj[:2]) * (x1Data[:2] - x1_proj[:2])
+    residual_x2 = (x2Data[:2] - x2_proj[:2]) * (x2Data[:2] - x2_proj[:2])
+    residual_x3 = (x3Data[:2] - x3_proj[:2]) * (x3Data[:2] - x3_proj[:2])
+
+    # Concatenate all residuals
+    residuals = np.hstack((residual_x1, residual_x2, residual_x3)).flatten()
+    return residuals
+
+
+def bundle_adjustment_3views(x1Data, x2Data, x3Data, K_c, T_init_21, T_init_31, X_in, T_gt):
+    """
+    Perform bundle adjustment for three views.
+    x1Data: Observed 2D points in image 1
+    x2Data: Observed 2D points in image 2
+    x3Data: Observed 2D points in image 3
+    K_c: Intrinsic calibration matrix
+    T_init_21: Initial transformation for T_21 (theta, t)
+    T_init_31: Initial transformation for T_31 (theta, t)
+    X_in: Initial 3D points
+    T_gt: Ground truth transformation for scale reference
+    """
+    
+    X_init = X_in[:3, :]
+    # Initialize parameters
+    initial_params = np.hstack([T_init_21[:3], T_init_21[3:], T_init_31[:3], T_init_31[3:], X_init.T.flatten()])
+    
+    # Run bundle adjustment optimization
+    result = least_squares(resBundleProjection, initial_params, args=(x1Data, x2Data, x3Data, K_c, X_in.shape[1]), method='trf')
+
+    # Retrieve optimized parameters and scale results
+    Op_opt = result.x
+    theta_opt_21 = Op_opt[:3]
+    t_opt_21 = Op_opt[3:6]
+    theta_opt_31 = Op_opt[6:9]
+    t_opt_31 = Op_opt[9:12]
+
+    # Scaling transformation based on ground truth scale
+    scale_factor = np.linalg.norm(T_gt[3:6]) / np.linalg.norm(t_opt_21)
+    t_opt_21 *= scale_factor
+    t_opt_31 *= scale_factor
+    X_opt = Op_opt[12:].reshape((X_in.shape[1], 3)) * scale_factor
+
+    # Return optimized rotation, translation, and 3D points
+    return (expm(crossMatrix(theta_opt_21)), t_opt_21, expm(crossMatrix(theta_opt_31)), t_opt_31, X_opt)
+
+
+# Convertimos la rotación inicial T_wc2[:3, :3] a theta
+theta_init = crossMatrixInv(logm(R_correct.astype('float64')))
+# Obtenemos el vector de traslación inicial de T_wc2
+t_init = t_correct
+
+# Preparamos los parámetros iniciales (theta y t juntos)
+T_init2 = np.hstack([theta_init, t_init])
+T_init3 = np.hstack([crossMatrixInv(logm(R_w_c3_pnp.astype('float64'))), t_w_c3_pnp])
+
+# Ejecutamos el ajuste de bundle adjustment
+R_opt2, t_opt2, R_opt3, t_opt3, X_opt = bundle_adjustment_3views(x1, x2, x3, K_c, T_init2, T_init3, (X_w_triangulated @ T_w_c1).T, T_w_c2)
+
+X_3D = triangulate_points_from_cameras(R_opt2, t_opt2, K_c, pts1, pts2).T
+X_3D = T_w_c1 @ np.vstack([X_3D, np.ones((1, X_3D.shape[1]))])
+
+print("initial_theta: " + str(R_correct))
+print("optimized_theta: " + str(R_opt))
+print("initial_t_21: " + str(t_correct))
+print("optimized_t_21: " + str(t_opt))
+# print("initial_X1: " + str(X_w_triangulated))
+# print("optimized_X1: " + str(X_opt))
+
+# Create the figure and system references.
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+pd.drawRefSystem(ax, np.eye(4), '-', 'W')   # World.
+pd.drawRefSystem(ax, T_w_c1, '-', 'C1')     # Camera 1.
+pd.drawRefSystem(ax, T_w_c2, '-', 'C2')     # Camera 2.
+
+# Plot the points over the figure.
+ax.scatter(X_w_ref[:, 0], X_w_ref[:, 1], X_w_ref[:, 2], c='r', label='Reference', marker='o')
+ax.scatter(X_w_triangulated[:, 0], X_w_triangulated[:, 1], X_w_triangulated[:, 2], c='b', label='Triangulated', marker='^')
+ax.scatter(X_3D.T[:, 0], X_3D.T[:, 1], X_3D.T[:, 2], c='g', label='Triangulated_opt', marker='^')
+
+# Compute the euclidean distance between the reference and the triangulated points, then show the mean and median.
+distances = np.linalg.norm(X_w_ref[:, :3] - X_w_triangulated[:, :3], axis=1)
+
+# Show mean and median distances.
+print ("Triangulation acurracy, compared to reference:")
+print (f"Mean distance: {np.mean(distances)}")
+print (f"Median distance: {np.median(distances)}")
+
+# Axis labels, legend, and plot show.
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
+ax.legend()
+plt.show()
+
+
+# Crear la matriz de transformación optimizada para la cámara C2
+T_wc2_opt = np.eye(4)
+T_wc2_opt[:3, :3] = R_opt2
+T_wc2_opt[:3, 3] = t_opt2
+
+# Crear la matriz de transformación optimizada para la cámara C2
+T_wc3_opt = np.eye(4)
+T_wc3_opt[:3, :3] = R_opt3
+T_wc3_opt[:3, 3] = t_opt3
+
+scale_factor = np.linalg.norm(R_correct) / np.linalg.norm(R_opt)
+scale_factor = np.linalg.norm(t_correct) / np.linalg.norm(t_opt)
+t_opt_scaled = t_opt * scale_factor
+print("Scale factor: ", scale_factor)
+T_wc2_opt *= scale_factor
+
+# Proyectar los puntos optimizados en cada imagen usando T_wc1, T_wc2_opt
+x1_p_opt = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c1) @ X_3D
+x2_p_opt = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c2) @ X_3D
+x3_p_opt = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c3) @ X_3D
+# x2_p_opt = K_c @ np.eye(3, 4) @ np.linalg.inv(T_wc2_opt) @ X_3D
+
+x1_p = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c1) @ X_w_ref.T
+x2_p = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c2) @ X_w_ref.T
+x3_p = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c3) @ X_w_ref.T
+# Normalizar las coordenadas para obtener las proyecciones en píxeles
+x1_p_opt /= x1_p_opt[2, :]
+x2_p_opt /= x2_p_opt[2, :]
+x3_p_opt /= x3_p_opt[2, :]
+x1_p /= x1_p[2, :]
+x2_p /= x2_p[2, :]
+x3_p /= x3_p[2, :]
+
+# Imagen 1
+plt.figure(11)
+plt.imshow(img1, cmap='gray', vmin=0, vmax=255)
+plotResidual(x1, x1_p, 'k-')  # Residuals originales
+plotResidual(x1, x1_p_opt, 'k-')  # Residuals optimizado
+plt.plot(x1_p[0, :], x1_p[1, :], 'bo', label='Original Projection')
+plt.plot(x1_p_opt[0, :], x1_p_opt[1, :], 'go', label='Optimized Projection')  # Proyecciones optimizadas
+plt.plot(x1[0, :], x1[1, :], 'rx')
+plotNumberedImagePoints(x1[0:2, :], 'r', 4)
+plt.legend()
+plt.title('Image 1')
+
+# Imagen 2
+plt.figure(12)
+plt.imshow(img2, cmap='gray', vmin=0, vmax=255)
+plotResidual(x2, x2_p, 'k-')
+plotResidual(x2, x2_p_opt, 'k-')  # Residuals optimizado
+plt.plot(x2_p[0, :], x2_p[1, :], 'bo', label='Original Projection')
+plt.plot(x2_p_opt[0, :], x2_p_opt[1, :], 'go', label='Optimized Projection')
+plt.plot(x2[0, :], x2[1, :], 'rx')
+plotNumberedImagePoints(x2[0:2, :], 'r', 4)
+plt.legend()
+plt.title('Image 2')
+
+# Imagen 3
+plt.figure(13)
+plt.imshow(img3, cmap='gray', vmin=0, vmax=255)
+plotResidual(x3, x3_p, 'k-')
+plotResidual(x3, x3_p_opt, 'k-')  # Residuals optimizado
+plt.plot(x3_p[0, :], x3_p[1, :], 'bo', label='Original Projection')
+plt.plot(x3_p_opt[0, :], x3_p_opt[1, :], 'go', label='Optimized Projection')
+plt.plot(x3[0, :], x3[1, :], 'rx')
+plotNumberedImagePoints(x3[0:2, :], 'r', 4)
+plt.legend()
+plt.title('Image 3')
+plt.show()
