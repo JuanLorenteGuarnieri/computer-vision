@@ -14,6 +14,217 @@ import os
 import plotData as pd
 sys.path.append(os.path.abspath('./p2/ext'))
 
+    
+
+
+import numpy as np
+from scipy.linalg import expm, logm
+
+# Cross-product matrix for rotation vector
+def crossMatrix(x):
+    M = np.array([[0, -x[2], x[1]], 
+                  [x[2], 0, -x[0]], 
+                  [-x[1], x[0], 0]])
+    return M
+
+# Inverse cross-product for retrieving rotation vector from a skew-symmetric matrix
+def crossMatrixInv(M):
+    return np.array([M[2, 1], M[0, 2], M[1, 0]])
+
+def project_point(K, R, t, X):
+    """Projects a 3D point X in reference frame onto 2D image using intrinsic matrix K, rotation R, and translation t."""
+    X_cam = R @ X + t
+    x_proj = K @ X_cam
+    x_proj /= x_proj[2]  # Convert to homogeneous coordinates
+    return x_proj[:2]  # Return only the 2D coordinates
+
+def resBundleProjection2(Op, x1Data, x2Data, K_c, nPoints):
+    """
+    Calculate the reprojection residuals for bundle adjustment using two views.
+    
+    Parameters:
+        Op (array): Optimization parameters including T_21 (rotation and translation between views) 
+                    and X1 (3D points in reference frame 1).
+        x1Data (array): (3 x nPoints) 2D points in image 1 (homogeneous coordinates).
+        x2Data (array): (3 x nPoints) 2D points in image 2 (homogeneous coordinates).
+        K_c (array): (3 x 3) intrinsic calibration matrix.
+        nPoints (int): Number of 3D points.
+        
+    Returns:
+        res (array): Residuals, which are the errors between the observed 2D matched points 
+                     and the projected 3D points.
+    """
+    # Extract rotation (theta) and translation (t) from optimization parameters
+    theta = Op[:3]                # Rotation vector (3 parameters)
+    t_21 = Op[3:6]                # Translation vector (3 parameters)
+    X1 = Op[6:].reshape((nPoints, 3))  # 3D points (each with 3 coordinates)
+    
+    # Compute rotation matrix from rotation vector theta using exponential map
+    R_21 = expm(crossMatrix(theta))  # Compute R_21 from theta
+
+    # Residuals array
+    residuals = []
+
+    # Compute residuals for each point
+    for i in range(nPoints):
+        # Get the 3D point in reference 1
+        X = X1[i]
+
+        # Project point X to image 1 (should match x1Data)
+        x1_proj = K_c @ X
+        x1_proj /= x1_proj[2]  # Normalize to homogeneous coordinates
+
+        # Project point X to reference frame 2
+        X2 = R_21 @ X + t_21  # Transform to ref 2
+
+        # Project X2 to image 2 (should match x2Data)
+        x2_proj = K_c @ X2
+        x2_proj /= x2_proj[2]  # Normalize to homogeneous coordinates
+
+        # Calculate residuals as the difference between observed and projected points
+        residual_x1 = x1Data[:, i] - x1_proj[:2]  # Difference in image 1
+        residual_x2 = x2Data[:, i] - x2_proj[:2]  # Difference in image 2
+        
+        # Append to residuals
+        residuals.extend(residual_x1)
+        residuals.extend(residual_x2)
+        # print("Residual nº ", i, " completed")
+    return np.array(residuals)
+
+def resBundleProjection(Op, x1Data, x2Data, K_c, nPoints):
+    """
+    Calculate the reprojection residuals for bundle adjustment using two views.
+    
+    Parameters:
+        Op (array): Optimization parameters including T_21 (rotation and translation between views) 
+                    and X1 (3D points in reference frame 1).
+        x1Data (array): (3 x nPoints) 2D points in image 1 (homogeneous coordinates).
+        x2Data (array): (3 x nPoints) 2D points in image 2 (homogeneous coordinates).
+        K_c (array): (3 x 3) intrinsic calibration matrix.
+        nPoints (int): Number of 3D points.
+        
+    Returns:
+        res (array): Residuals, which are the errors between the observed 2D matched points 
+                     and the projected 3D points.
+    """
+    # Extract rotation (theta) and translation (t) from optimization parameters
+    theta = Op[:3]                # Rotation vector (3 parameters)
+    t_21 = Op[3:6]                # Translation vector (3 parameters)
+    X1 = Op[6:].reshape((nPoints, 3))  # 3D points (each with 3 coordinates)
+    
+    # Compute rotation matrix from rotation vector theta using exponential map
+    R_21 = expm(crossMatrix(theta))  # Compute R_21 from theta
+
+    # Residuals array
+    residuals = []
+
+    # Compute residuals for each point
+    for i in range(nPoints):
+        # Get the 3D point in reference 1
+        X = X1[i]
+
+        # Project point X to image 1 (should match x1Data)
+        x1_proj = K_c @ X
+        x1_proj /= x1_proj[2]  # Normalize to homogeneous coordinates
+
+        # Project point X to reference frame 2
+        X2 = R_21 @ X + t_21  # Transform to ref 2
+
+        # Project X2 to image 2 (should match x2Data)
+        x2_proj = K_c @ X2
+        x2_proj /= x2_proj[2]  # Normalize to homogeneous coordinates
+
+        # Calculate residuals as the difference between observed and projected points
+        residual_x1 = x1Data[:, i] - x1_proj[:2]  # Difference in image 1
+        residual_x2 = x2Data[:, i] - x2_proj[:2]  # Difference in image 2
+        
+        # Append to residuals
+        residuals.extend(residual_x1)
+        residuals.extend(residual_x2)
+        # print("Residual nº ", i, " completed")
+    return np.array(residuals)
+def resBundleProjection2(Op, x1Data, x2Data, K_c, nPoints):
+    """
+    Calculate the reprojection residuals for bundle adjustment using two views.
+    
+    Parameters:
+        Op (array): Optimization parameters including T_21 (rotation and translation between views) 
+                    and X1 (3D points in reference frame 1).
+        x1Data (array): (3 x nPoints) 2D points in image 1 (homogeneous coordinates).
+        x2Data (array): (3 x nPoints) 2D points in image 2 (homogeneous coordinates).
+        K_c (array): (3 x 3) intrinsic calibration matrix.
+        nPoints (int): Number of 3D points.
+        
+    Returns:
+        res (array): Residuals, which are the errors between the observed 2D matched points 
+                     and the projected 3D points.
+    """
+    # Extract rotation (theta) and translation (t) from optimization parameters
+    theta = Op[:3]                # Rotation vector (3 parameters)
+    t_21 = Op[3:6]                # Translation vector (3 parameters)
+    X1 = Op[6:].reshape((3, nPoints))  # 3D points (each with 3 coordinates)
+    
+    # Compute rotation matrix from rotation vector theta using exponential map
+    R_21 = expm(crossMatrix(theta))  # Compute R_21 from theta
+
+    # Residuals array
+    residuals = []
+
+    # Compute residuals for each point
+    for i in range(nPoints):
+        # Project point in ref 1 to ref 2
+        x1_proj = project_point(K_c, R_21, t_21, X1[:, i])
+        
+        # Calculate residuals for x and y coordinates
+        residuals.extend((x1_proj - x2Data[:2, i]).tolist())
+        # print("Residual nº ", i, " completed")
+    return np.array(residuals)
+
+from scipy.optimize import least_squares
+def bundle_adjustment(x1Data, x2Data, K_c, T_init, X_in):
+    """
+    Perform bundle adjustment using least-squares optimization.
+    x1Data: Observed 2D points in image 1
+    x2Data: Observed 2D points in image 2
+    K_c: Intrinsic calibration matrix
+    T_init: Initial transformation parameters (theta, t)
+    X_in: Initial 3D points
+    """
+    
+    # Definir la fracción de los puntos a usar en la muestra
+    sample_fraction = 0.3  # Por ejemplo, el 30% de los puntos
+    x1Data_sample = x1Data
+    x2Data_sample = x2Data
+    X_init = X_in[:3, :]
+    nPoints_sample = int(sample_fraction * X_in.shape[1])
+    if sample_fraction < 1:
+        # Seleccionar una muestra de los índices de puntos
+        sample_indices = np.random.choice(X_in.shape[1], nPoints_sample, replace=False)
+
+        # Tomar los puntos de la muestra usando los índices seleccionados
+        X_init_sample = X_in[:, sample_indices]
+        x1Data_sample = x1Data[:, sample_indices]
+        x2Data_sample = x2Data[:, sample_indices]
+        # Puntos iniciales en 3D (X_init_sample) que ya tienes
+        X_init = X_init_sample[:3, :]
+
+    initial_params = np.hstack([T_init[:3], T_init[3:], X_init.T.flatten()])
+    # initial_params = np.hstack([[ 0.011, 2.6345, 1.4543], [-1.4445, -2.4526, 18.1895], X_init.T.flatten()])
+
+    # Run bundle adjustment optimization
+    result = least_squares(resBundleProjection, initial_params, args=(x1Data_sample, x2Data_sample, K_c, nPoints_sample), method='trf') #method='lm'
+
+    # Retrieve optimized parameters
+    Op_opt = result.x
+    theta_opt = Op_opt[:3]
+    t_opt = Op_opt[3:6]
+    # scale_factor = np.linalg.norm(t_init) / np.linalg.norm(t_opt)
+    # t_opt *= scale_factor
+    X_opt = Op_opt[6:].reshape((nPoints_sample, 3))
+
+    # Return optimized rotation, translation, and 3D points
+    return expm(crossMatrix(theta_opt)), t_opt, X_opt
+
 
 def obtain_proyection_matrices(K, R, t):
     """
@@ -297,16 +508,12 @@ def triangulate_points_from_cameras(R, t, K, pts1, pts2):
     return triangulate_points(P1, P2, pts1, pts2)
 
 
-#---------------------------------------------------------------------------#
-#################################   LAB 2   #################################
-#---------------------------------------------------------------------------#
-
 #################### 2.1 Epipolar lines visualization ########################
 
 # Load images and the fundamental matrix.
-img1 = cv2.cvtColor(cv2.imread('./ext/image1.png'), cv2.COLOR_BGR2RGB)
-img2 = cv2.cvtColor(cv2.imread('./ext/image2.png'), cv2.COLOR_BGR2RGB)
-F_21 = np.loadtxt('./ext/F_21_test.txt') # Testing fundamental matrix.
+img1 = cv2.cvtColor(cv2.imread('./p2/ext/image1.png'), cv2.COLOR_BGR2RGB)
+img2 = cv2.cvtColor(cv2.imread('./p2/ext/image2.png'), cv2.COLOR_BGR2RGB)
+F_21 = np.loadtxt('./p2/ext/F_21_test.txt') # Testing fundamental matrix.
 F_estimated = F_21
 
 
@@ -340,15 +547,6 @@ def onclick(event):
         plt.title(f"Epipolar line in image 2 for the point {pt1} in image 1")
         plt.axis('off')
         plt.show()
-
-# Show the first image and set the click event.
-fig, ax = plt.subplots(figsize=(8, 6))
-ax.imshow(img1)
-ax.set_title("Click on a point in image 1 to generate the epipolar line in image 2")
-cid = fig.canvas.mpl_connect('button_press_event', onclick)
-
-plt.show()
-
 
 #################### 2.2 Fundamental matrix definition ########################
 
@@ -399,15 +597,6 @@ F_21 = np.linalg.inv(K_c.T) @ T_x @ R_21 @ np.linalg.inv(K_c)
 F_estimated = F_21
 np.savetxt('./p2/ext/F_21.txt', F_21)
 
-# Check the epipolar lines with the same interface as 2.1.
-fig, ax = plt.subplots(figsize=(8, 6))
-ax.imshow(img1)
-ax.set_title("Click on a point in image 1 to generate the epipolar line in image 2")
-cid = fig.canvas.mpl_connect('button_press_event', onclick)
-
-plt.show()
-
-
 #################### 2.3 Fundamental matrix linear estimation with eight point solution ########################
 
 # Load the point correspondences.
@@ -416,15 +605,6 @@ x2 = np.loadtxt('./p2/ext/x2Data.txt')
 
 # OpenCV implementation to estimate the fundamental matrix.
 F_estimated, mask = cv2.findFundamentalMat(x1.T, x2.T, cv2.FM_8POINT)
-
-# Check the epipolar lines with the same interface as 2.1.
-fig, ax = plt.subplots(figsize=(8, 6))
-ax.imshow(img1)
-ax.set_title("Click on a point in image 1 to generate the epipolar line in image 2")
-cid = fig.canvas.mpl_connect('button_press_event', onclick)
-
-plt.show()
-
 
 #################### 2.4 Pose estimation from two views ########################
 
@@ -460,6 +640,34 @@ np.savetxt('./p2/ext/X_triangulated.txt', X_3D.T)
 X_w_ref = np.loadtxt('./p2/ext/X_w.txt').T
 X_w_triangulated = np.loadtxt('./p2/ext/X_triangulated.txt')
 
+
+
+########################################################################
+####################### LAB 4 2.1 two views ###########################
+########################################################################
+
+# Convertimos la rotación inicial T_wc2[:3, :3] a theta
+theta_init = crossMatrixInv(logm(R_correct.astype('float64')))
+# Obtenemos el vector de traslación inicial de T_wc2
+t_init = t_correct
+
+# Preparamos los parámetros iniciales (theta y t juntos)
+T_init = np.hstack([theta_init, t_init])
+
+
+# Ejecutamos el ajuste de bundle adjustment
+R_opt, t_opt, X_opt = bundle_adjustment(x1, x2, K_c, T_init, (X_w_triangulated @ T_w_c1).T)
+
+X_3D = triangulate_points_from_cameras(R_opt, t_opt, K_c, pts1, pts2).T
+X_3D = T_w_c1 @ np.vstack([X_3D, np.ones((1, X_3D.shape[1]))])
+
+print("initial_theta: " + str(R_correct))
+print("optimized_theta: " + str(R_opt))
+print("initial_t_21: " + str(t_correct))
+print("optimized_t_21: " + str(t_opt))
+# print("initial_X1: " + str(X_w_triangulated))
+# print("optimized_X1: " + str(X_opt))
+
 # Create the figure and system references.
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
@@ -470,6 +678,7 @@ pd.drawRefSystem(ax, T_w_c2, '-', 'C2')     # Camera 2.
 # Plot the points over the figure.
 ax.scatter(X_w_ref[:, 0], X_w_ref[:, 1], X_w_ref[:, 2], c='r', label='Reference', marker='o')
 ax.scatter(X_w_triangulated[:, 0], X_w_triangulated[:, 1], X_w_triangulated[:, 2], c='b', label='Triangulated', marker='^')
+ax.scatter(X_3D.T[:, 0], X_3D.T[:, 1], X_3D.T[:, 2], c='g', label='Triangulated_opt', marker='^')
 
 # Compute the euclidean distance between the reference and the triangulated points, then show the mean and median.
 distances = np.linalg.norm(X_w_ref[:, :3] - X_w_triangulated[:, :3], axis=1)
@@ -486,141 +695,115 @@ ax.set_zlabel('Z')
 ax.legend()
 plt.show()
 
-
-#################### 3.1 Homography definition ########################
-
-# Load the point correspondences and the plane parameters.
-x1_floor = np.loadtxt('./p2/ext/x1FloorData.txt')[:2, :].T
-x2_floor = np.loadtxt('./p2/ext/x2FloorData.txt')[:2, :].T
-Pi_1 = np.loadtxt('./p2/ext/Pi_1.txt')
-n = Pi_1[:3]
-d = Pi_1[-1]
-
-# Get the homography matrix.
-H = K_c @ (R_c2_c1 - (t_21.reshape(3,1) @ n.reshape(1,3)) / d) @ np.linalg.inv(K_c)
-print ("3.1 Homography matrix:")
-print (H)
-
-
-#################### 3.2 Point transfer visualization ########################
-
-# Transfer points from image 1 to image 2 using the homography.
-x1_homogeneous = np.vstack([x1, np.ones((1, x1.shape[1]))])
-x2_estimated = H @ x1_homogeneous
-
-# Convert to inhomogeneous coordinates.
-x2_estimated /= x2_estimated[2, :]
-pts_3_2 = visualize_point_transfer(H, img1, img2, x1_floor)
-
-#################### 3.3 Homography linear estimation from matches ########################
-
-# Estimate the homography
-H_estimated = compute_homography(x1_floor, x2_floor)
-
-# Visualize the point transfer
-pts_3_3 = visualize_point_transfer(H_estimated, img1, img2, x1_floor)
-
-# Compure distance between both results.
-distances = np.linalg.norm(pts_3_2 - pts_3_3, axis=1)
-print ("Estimated homography accuracy, comparing its results with the ones from the computed homography:")
-print (f"Mean distance: {np.mean(distances)}")
-print (f"Median distance: {np.median(distances)}")
-
-
-
-
-#---------------------------------------------------------------------------#
-#################################   LAB 3   #################################
-#---------------------------------------------------------------------------#
-
-import numpy as np
-from scipy.linalg import expm, logm
-
-# Cross-product matrix for rotation vector
-def crossMatrix(x):
-    M = np.array([[0, -x[2], x[1]], 
-                  [x[2], 0, -x[0]], 
-                  [-x[1], x[0], 0]])
-    return M
-
-# Inverse cross-product for retrieving rotation vector from a skew-symmetric matrix
-def crossMatrixInv(M):
-    return np.array([M[2, 1], M[0, 2], M[1, 0]])
-
-def resBundleProjection(Op, x1Data, x2Data, K_c, nPoints):
+def plotNumberedImagePoints(x,strColor,offset):
     """
-    Calculate the reprojection residuals for bundle adjustment using two views.
-    
-    Parameters:
-        Op (array): Optimization parameters including T_21 (rotation and translation between views) 
-                    and X1 (3D points in reference frame 1).
-        x1Data (array): (3 x nPoints) 2D points in image 1 (homogeneous coordinates).
-        x2Data (array): (3 x nPoints) 2D points in image 2 (homogeneous coordinates).
-        K_c (array): (3 x 3) intrinsic calibration matrix.
-        nPoints (int): Number of 3D points.
-        
-    Returns:
-        res (array): Residuals, which are the errors between the observed 2D matched points 
-                     and the projected 3D points.
+        Plot indexes of points on a 2D image.
+         -input:
+             x: Points coordinates.
+             strColor: Color of the text.
+             offset: Offset from the point to the text.
+         -output: None
+         """
+    for k in range(x.shape[1]):
+        plt.text(x[0, k]+offset, x[1, k]+offset, str(k), color=strColor)
+def plotResidual(x,xProjected,strStyle):
     """
+        Plot the residual between an image point and an estimation based on a projection model.
+         -input:
+             x: Image points.
+             xProjected: Projected points.
+             strStyle: Line style.
+         -output: None
+         """
+
+    for k in range(x.shape[1]):
+        plt.plot([x[0, k], xProjected[0, k]], [x[1, k], xProjected[1, k]], strStyle)
+
+# Crear la matriz de transformación optimizada para la cámara C2
+T_wc2_opt = np.eye(4)
+T_wc2_opt[:3, :3] = R_opt
+T_wc2_opt[:3, 3] = t_opt
+
+# Proyectar los puntos optimizados en cada imagen usando T_wc1, T_wc2_opt
+x1_p_opt = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c1) @ X_3D
+x2_p_opt = K_c @ np.eye(3, 4) @ np.linalg.inv(T_wc2_opt) @ X_3D
+
+x1_p = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c1) @ X_w_ref.T
+x2_p = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c2) @ X_w_ref.T
+# Normalizar las coordenadas para obtener las proyecciones en píxeles
+x1_p_opt /= x1_p_opt[2, :]
+x2_p_opt /= x2_p_opt[2, :]
+x1_p /= x1_p[2, :]
+x2_p /= x2_p[2, :]
     
-    # Extract rotation (theta) and translation (t) from optimization parameters
-    theta = Op[:3]                # Rotation vector (3 parameters)
-    t_21 = Op[3:6]                # Translation vector (3 parameters)
-    X1 = Op[6:].reshape((nPoints, 3))  # 3D points (each with 3 coordinates)
     
-    # Compute rotation matrix from rotation vector theta using exponential map
-    R_21 = expm(crossMatrix(theta))  # Compute R_21 from theta
+# Imagen 1
+plt.figure(4)
+plt.imshow(img1, cmap='gray', vmin=0, vmax=255)
+plotResidual(x1, x1_p, 'k-')  # Residuals originales
+plotResidual(x1, x1_p_opt, 'k-')  # Residuals optimizado
+plt.plot(x1_p[0, :], x1_p[1, :], 'bo', label='Original Projection')
+plt.plot(x1_p_opt[0, :], x1_p_opt[1, :], 'go', label='Optimized Projection')  # Proyecciones optimizadas
+plt.plot(x1[0, :], x1[1, :], 'rx')
+plotNumberedImagePoints(x1[0:2, :], 'r', 4)
+plt.legend()
+plt.title('Image 1')
 
-    # Residuals array
-    residuals = []
+# Imagen 2
+plt.figure(5)
+plt.imshow(img2, cmap='gray', vmin=0, vmax=255)
+plotResidual(x2, x2, 'k-')
+plotResidual(x2, x2_p_opt, 'k-')  # Residuals optimizado
+plt.plot(x2_p[0, :], x2_p[1, :], 'bo', label='Original Projection')
+plt.plot(x2_p_opt[0, :], x2_p_opt[1, :], 'go', label='Optimized Projection')
+plt.plot(x2[0, :], x2[1, :], 'rx')
+plotNumberedImagePoints(x2[0:2, :], 'r', 4)
+plt.legend()
+plt.title('Image 2')
+plt.show()
 
-    # Compute residuals for each point
-    for i in range(nPoints):
-        # Get the 3D point in reference 1
-        X = X1[i]
 
-        # Project point X to image 1 (should match x1Data)
-        x1_proj = K_c @ X
-        x1_proj /= x1_proj[2]  # Normalize to homogeneous coordinates
 
-        # Project point X to reference frame 2
-        X2 = R_21 @ X + t_21  # Transform to ref 2
+########################################################################
+################### LAB 4 3.0 Perspective-N-Point #######################
+########################################################################
 
-        # Project X2 to image 2 (should match x2Data)
-        x2_proj = K_c @ X2
-        x2_proj /= x2_proj[2]  # Normalize to homogeneous coordinates
+x3 = np.loadtxt('./p2/ext/x3Data.txt')
+# Convert the 3D points to (n, 1, 2) format as required by solvePnP
+imagePoints1 = np.ascontiguousarray(x1[0:2, :].T).reshape((x1.shape[1], 1, 2))  # (nPoints, 1, 2)
+imagePoints2 = np.ascontiguousarray(x2[0:2, :].T).reshape((x2.shape[1], 1, 2))  # (nPoints, 1, 2)
+imagePoints3 = np.ascontiguousarray(x3[0:2, :].T).reshape((x3.shape[1], 1, 2))  # (nPoints, 1, 2)
 
-        # Calculate residuals as the difference between observed and projected points
-        residual_x1 = x1Data[:, i] - x1_proj[:2]  # Difference in image 1
-        residual_x2 = x2Data[:, i] - x2_proj[:2]  # Difference in image 2
-        
-        # Append to residuals
-        residuals.extend(residual_x1)
-        residuals.extend(residual_x2)
+# Now, apply the solvePnP to estimate the pose of the third camera with respect to the first
+# We can use the triangulated points or reference points as object points
+objectPoints = X_w_ref[:,:3]  # 3D object points (nPoints, 3)
+# objectPoints = (X_w_ref @ T_w_c1)[:,:3]  # 3D object points (nPoints, 3)
 
-    return np.array(residuals)
+# Set distortion coefficients to zero (we have undistorted images)
+distCoeffs = np.zeros(4)
 
-from scipy.optimize import least_squares
+print("objectPoints: " + str(objectPoints.shape))
+print("imagePoints1: " + str(imagePoints1.shape))
 
-# Assuming you have an initial guess for theta, t_21, and X1
-theta = crossMatrixInv(logm(R))
-initial_params = np.hstack([theta, t_21, X_w_ref.flatten()])
+# Solve PnP using the EPNP algorithm
+retval, rvec, tvec = cv2.solvePnP(objectPoints, imagePoints3, K_c, distCoeffs, flags=cv2.SOLVEPNP_EPNP)
 
-# Run bundle adjustment optimization
-result = least_squares(resBundleProjection, initial_params, args=(x1, x2, K_c, len(X_3D)), method='lm')
-optimized_params = result.x
+print("retval: " + str(retval))
+print("rvec: " + str(rvec.T))
+print("tvec: " + str(tvec))
 
-# Extract optimized rotation, translation, and 3D points
-optimized_theta = optimized_params[:3]
-optimized_t_21 = optimized_params[3:6]
-optimized_X1 = optimized_params[6:].reshape((len(X_3D), 3))
+R_w_c3 = expm(crossMatrix(rvec.T[0]))
+t_w_c3 = tvec.ravel()
+T_w_c3_pnp = ensamble_T(R_w_c3, t_w_c3)
 
-print("initial_theta: " + str(theta))
-print("optimized_theta: " + str(optimized_theta))
-print("initial_t_21: " + str(t_21))
-print("optimized_t_21: " + str(X_w_ref))
-print("initial_X1: " + str(t_21))
-print("optimized_X1: " + str(optimized_X1))
+T_w_c3 = np.loadtxt('./p2/ext/T_w_c3.txt')
 
-# Use these optimized parameters for visualization and residual analysis
+# Create the figure and system references.
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+pd.drawRefSystem(ax, np.eye(4), '-', 'W')   # World.
+pd.drawRefSystem(ax, T_w_c1, '-', 'C1')     # Camera 1.
+pd.drawRefSystem(ax, T_w_c2, '-', 'C2')     # Camera 2.
+pd.drawRefSystem(ax, T_w_c3, '-', 'C3 GT')     # Camera 3 GT.
+pd.drawRefSystem(ax, T_w_c3_pnp, '-', 'C3 PNP')     # Camera 3 PNP.
+plt.show()
