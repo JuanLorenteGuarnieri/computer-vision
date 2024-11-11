@@ -38,61 +38,50 @@ def project_point(K, R, t, X):
     x_proj /= x_proj[2]  # Convert to homogeneous coordinates
     return x_proj[:2]  # Return only the 2D coordinates
 
-def resBundleProjection2(Op, x1Data, x2Data, K_c, nPoints):
-    """
-    Calculate the reprojection residuals for bundle adjustment using two views.
-    
-    Parameters:
-        Op (array): Optimization parameters including T_21 (rotation and translation between views) 
-                    and X1 (3D points in reference frame 1).
-        x1Data (array): (3 x nPoints) 2D points in image 1 (homogeneous coordinates).
-        x2Data (array): (3 x nPoints) 2D points in image 2 (homogeneous coordinates).
-        K_c (array): (3 x 3) intrinsic calibration matrix.
-        nPoints (int): Number of 3D points.
-        
-    Returns:
-        res (array): Residuals, which are the errors between the observed 2D matched points 
-                     and the projected 3D points.
-    """
-    # Extract rotation (theta) and translation (t) from optimization parameters
-    theta = Op[:3]                # Rotation vector (3 parameters)
-    t_21 = Op[3:6]                # Translation vector (3 parameters)
-    X1 = Op[6:].reshape((nPoints, 3))  # 3D points (each with 3 coordinates)
-    
-    # Compute rotation matrix from rotation vector theta using exponential map
-    R_21 = expm(crossMatrix(theta))  # Compute R_21 from theta
-
-    # Residuals array
-    residuals = []
-
-    # Compute residuals for each point
-    for i in range(nPoints):
-        # Get the 3D point in reference 1
-        X = X1[i]
-
-        # Project point X to image 1 (should match x1Data)
-        x1_proj = K_c @ X
-        x1_proj /= x1_proj[2]  # Normalize to homogeneous coordinates
-
-        # Project point X to reference frame 2
-        X2 = R_21 @ X + t_21  # Transform to ref 2
-
-        # Project X2 to image 2 (should match x2Data)
-        x2_proj = K_c @ X2
-        x2_proj /= x2_proj[2]  # Normalize to homogeneous coordinates
-
-        # Calculate residuals as the difference between observed and projected points
-        residual_x1 = x1Data[:, i] - x1_proj[:2]  # Difference in image 1
-        residual_x2 = x2Data[:, i] - x2_proj[:2]  # Difference in image 2
-        
-        # Append to residuals
-        residuals.extend(residual_x1)
-        residuals.extend(residual_x2)
-        # print("Residual nº ", i, " completed")
-    return np.array(residuals)
-
 def resBundleProjection(Op, x1Data, x2Data, K_c, nPoints):
     """
+    Calculate the reprojection residuals for bundle adjustment using two views in a vectorized manner.
+    
+    Parameters:
+        Op (array): Optimization parameters including T_21 (rotation and translation between views) 
+                    and X1 (3D points in reference frame 1).
+        x1Data (array): (3 x nPoints) 2D points in image 1 (homogeneous coordinates).
+        x2Data (array): (3 x nPoints) 2D points in image 2 (homogeneous coordinates).
+        K_c (array): (3 x 3) intrinsic calibration matrix.
+        nPoints (int): Number of 3D points.
+        
+    Returns:
+        res (array): Residuals, which are the errors between the observed 2D matched points 
+                     and the projected 3D points.
+    """
+    # Extract rotation (theta) and translation (t) from optimization parameters
+    theta = Op[:3]                     # Rotation vector (3 parameters)
+    t_21 = Op[3:6]                     # Translation vector (3 parameters)
+    X1 = Op[6:].reshape((nPoints, 3))  # 3D points (each with 3 coordinates)
+
+    # Compute rotation matrix from rotation vector theta using exponential map
+    R_21 = expm(crossMatrix(theta))    # Compute R_21 from theta
+
+    # Project all 3D points to image 1 (camera 1)
+    x1_proj = K_c @ X1.T               # Project all points in one operation
+    x1_proj /= x1_proj[2]              # Normalize to homogeneous coordinates
+
+    # Transform all points from frame 1 to frame 2
+    X2 = (R_21 @ X1.T).T + t_21        # Transform points to reference frame 2
+
+    # Project all transformed points to image 2 (camera 2)
+    x2_proj = K_c @ X2.T               # Project all transformed points in one operation
+    x2_proj /= x2_proj[2]              # Normalize to homogeneous coordinates
+
+    # Calculate residuals as the difference between observed and projected points
+    residual_x1 = (x1Data[:2] - x1_proj[:2]) * (x1Data[:2] - x1_proj[:2])   # Difference for image 1
+    residual_x2 = (x2Data[:2] - x2_proj[:2]) * (x2Data[:2] - x2_proj[:2])   # Difference for image 2
+
+    # Concatenate and return residuals as a flat array
+    residuals = np.hstack((residual_x1, residual_x2)).flatten()
+    return residuals
+def resBundleProjection2(Op, x1Data, x2Data, K_c, nPoints):
+    """
     Calculate the reprojection residuals for bundle adjustment using two views.
     
     Parameters:
@@ -135,48 +124,12 @@ def resBundleProjection(Op, x1Data, x2Data, K_c, nPoints):
         x2_proj /= x2_proj[2]  # Normalize to homogeneous coordinates
 
         # Calculate residuals as the difference between observed and projected points
-        residual_x1 = x1Data[:, i] - x1_proj[:2]  # Difference in image 1
-        residual_x2 = x2Data[:, i] - x2_proj[:2]  # Difference in image 2
-        
+        residual_x1 = (x1Data[:, i] - x1_proj[:2]) * (x1Data[:, i] - x1_proj[:2])  # Difference in image 1
+        residual_x2 = (x2Data[:, i] - x2_proj[:2]) * (x2Data[:, i] - x2_proj[:2])  # Difference in image 2
+
         # Append to residuals
         residuals.extend(residual_x1)
         residuals.extend(residual_x2)
-        # print("Residual nº ", i, " completed")
-    return np.array(residuals)
-def resBundleProjection2(Op, x1Data, x2Data, K_c, nPoints):
-    """
-    Calculate the reprojection residuals for bundle adjustment using two views.
-    
-    Parameters:
-        Op (array): Optimization parameters including T_21 (rotation and translation between views) 
-                    and X1 (3D points in reference frame 1).
-        x1Data (array): (3 x nPoints) 2D points in image 1 (homogeneous coordinates).
-        x2Data (array): (3 x nPoints) 2D points in image 2 (homogeneous coordinates).
-        K_c (array): (3 x 3) intrinsic calibration matrix.
-        nPoints (int): Number of 3D points.
-        
-    Returns:
-        res (array): Residuals, which are the errors between the observed 2D matched points 
-                     and the projected 3D points.
-    """
-    # Extract rotation (theta) and translation (t) from optimization parameters
-    theta = Op[:3]                # Rotation vector (3 parameters)
-    t_21 = Op[3:6]                # Translation vector (3 parameters)
-    X1 = Op[6:].reshape((3, nPoints))  # 3D points (each with 3 coordinates)
-    
-    # Compute rotation matrix from rotation vector theta using exponential map
-    R_21 = expm(crossMatrix(theta))  # Compute R_21 from theta
-
-    # Residuals array
-    residuals = []
-
-    # Compute residuals for each point
-    for i in range(nPoints):
-        # Project point in ref 1 to ref 2
-        x1_proj = project_point(K_c, R_21, t_21, X1[:, i])
-        
-        # Calculate residuals for x and y coordinates
-        residuals.extend((x1_proj - x2Data[:2, i]).tolist())
         # print("Residual nº ", i, " completed")
     return np.array(residuals)
 
@@ -192,7 +145,7 @@ def bundle_adjustment(x1Data, x2Data, K_c, T_init, X_in):
     """
     
     # Definir la fracción de los puntos a usar en la muestra
-    sample_fraction = 0.3  # Por ejemplo, el 30% de los puntos
+    sample_fraction = 1 #0.3  # Por ejemplo, el 30% de los puntos
     x1Data_sample = x1Data
     x2Data_sample = x2Data
     X_init = X_in[:3, :]
@@ -724,9 +677,16 @@ T_wc2_opt = np.eye(4)
 T_wc2_opt[:3, :3] = R_opt
 T_wc2_opt[:3, 3] = t_opt
 
+scale_factor = np.linalg.norm(R_correct) / np.linalg.norm(R_opt)
+scale_factor = np.linalg.norm(t_correct) / np.linalg.norm(t_opt)
+t_opt_scaled = t_opt * scale_factor
+print("Scale factor: ", scale_factor)
+T_wc2_opt *= scale_factor
+
 # Proyectar los puntos optimizados en cada imagen usando T_wc1, T_wc2_opt
 x1_p_opt = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c1) @ X_3D
-x2_p_opt = K_c @ np.eye(3, 4) @ np.linalg.inv(T_wc2_opt) @ X_3D
+x2_p_opt = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c2) @ X_3D
+# x2_p_opt = K_c @ np.eye(3, 4) @ np.linalg.inv(T_wc2_opt) @ X_3D
 
 x1_p = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c1) @ X_w_ref.T
 x2_p = K_c @ np.eye(3, 4) @ np.linalg.inv(T_w_c2) @ X_w_ref.T
@@ -752,7 +712,7 @@ plt.title('Image 1')
 # Imagen 2
 plt.figure(5)
 plt.imshow(img2, cmap='gray', vmin=0, vmax=255)
-plotResidual(x2, x2, 'k-')
+plotResidual(x2, x2_p, 'k-')
 plotResidual(x2, x2_p_opt, 'k-')  # Residuals optimizado
 plt.plot(x2_p[0, :], x2_p[1, :], 'bo', label='Original Projection')
 plt.plot(x2_p_opt[0, :], x2_p_opt[1, :], 'go', label='Optimized Projection')
@@ -776,7 +736,7 @@ imagePoints3 = np.ascontiguousarray(x3[0:2, :].T).reshape((x3.shape[1], 1, 2))  
 
 # Now, apply the solvePnP to estimate the pose of the third camera with respect to the first
 # We can use the triangulated points or reference points as object points
-objectPoints = X_w_ref[:,:3]  # 3D object points (nPoints, 3)
+objectPoints = X_w_ref[:,:3] # 3D object points (nPoints, 3)
 # objectPoints = (X_w_ref @ T_w_c1)[:,:3]  # 3D object points (nPoints, 3)
 
 # Set distortion coefficients to zero (we have undistorted images)
@@ -792,9 +752,12 @@ print("retval: " + str(retval))
 print("rvec: " + str(rvec.T))
 print("tvec: " + str(tvec))
 
-R_w_c3 = expm(crossMatrix(rvec.T[0]))
-t_w_c3 = tvec.ravel()
-T_w_c3_pnp = ensamble_T(R_w_c3, t_w_c3)
+R_w_c3_pnp = expm(crossMatrix(rvec.T[0])).T
+t_w_c3_pnp = tvec.ravel()
+# T_w_c3_pnp = np.linalg.inv(T_w_c1) @ ensamble_T(R_w_c3_pnp, t_w_c3_pnp)
+T_w_c3_pnp = np.eye(4)
+T_w_c3_pnp[:3, :3] = R_w_c3_pnp
+T_w_c3_pnp[:3, 3] = -(T_w_c1[:3, :3] @ t_w_c3_pnp)
 
 T_w_c3 = np.loadtxt('./p2/ext/T_w_c3.txt')
 
@@ -807,3 +770,8 @@ pd.drawRefSystem(ax, T_w_c2, '-', 'C2')     # Camera 2.
 pd.drawRefSystem(ax, T_w_c3, '-', 'C3 GT')     # Camera 3 GT.
 pd.drawRefSystem(ax, T_w_c3_pnp, '-', 'C3 PNP')     # Camera 3 PNP.
 plt.show()
+
+########################################################################
+###################### LAB 4 4.0 three views ##########################
+########################################################################
+
