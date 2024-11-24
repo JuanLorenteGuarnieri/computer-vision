@@ -460,8 +460,8 @@ if __name__ == '__main__':
     # Ejecutamos el ajuste de bundle adjustment
     R_opt, t_opt, X_opt = bundle_adjustment(x1Data, x2Data, K_c, T_init, X_w)
 
-    X_opt = triangulate_points_from_cameras(R_opt, t_opt, K_c, x1Data.T, x2Data.T).T
-    X_opt = (T_wc1 @ np.vstack([X_opt, np.ones((1, X_opt.shape[1]))])).T
+    # X_opt = triangulate_points_from_cameras(R_opt, t_opt, K_c, x1Data.T, x2Data.T).T
+    X_opt = (T_wc1 @ np.vstack([X_opt.T, np.ones((1, X_opt.T.shape[1]))])).T
 
     print("initial_theta: " + str(T_wc2[:3, :3]))
     print("optimized_theta: " + str(R_opt))
