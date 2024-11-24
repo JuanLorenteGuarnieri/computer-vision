@@ -72,18 +72,19 @@ def bundle_adjustment(x1Data, x2Data, K_c, T_init, X_in):
     X_in: Initial 3D points
     """
     
-    # Definir la fracción de los puntos a usar en la muestra
-    sample_fraction = 0.3  # Por ejemplo, el 30% de los puntos
+    # Define the fraction of points to use in the sample
+    sample_fraction = 0.3  # For example, 30% of the points
     nPoints_sample = int(sample_fraction * X_in.shape[1])
 
-    # Seleccionar una muestra de los índices de puntos
+    # Select a random sample of point indices
     sample_indices = np.random.choice(X_in.shape[1], nPoints_sample, replace=False)
 
-    # Tomar los puntos de la muestra usando los índices seleccionados
+    # Extract the sampled points using the selected indices
     X_init_sample = X_in[:, sample_indices]
     x1Data_sample = x1Data[:, sample_indices]
     x2Data_sample = x2Data[:, sample_indices]
-    # Puntos iniciales en 3D (X_init_sample) que ya tienes
+    
+    # Initial 3D points (X_init_sample) already available
     X_init = X_init_sample[:3, :]
 
     initial_params = np.hstack([T_init[:3], T_init[3:], X_init.T.flatten()])
@@ -128,26 +129,26 @@ def unproject_kannala_brandt(u, K, D):
     Retorna:
     - v: Vector en la esfera unitaria (np.array([x, y, z])).
     """
-    # Paso 1: Convertir el punto en la imagen a coordenadas de la cámara
-    u_hom = np.array([u[0], u[1], 1.0])  # Coordenadas homogéneas
-    x_c = np.linalg.inv(K) @ u_hom       # Coordenadas en el sistema de la cámara
+    # Step 1: Convert the image point to camera coordinates
+    u_hom = np.array([u[0], u[1], 1.0])  # Homogeneous coordinates
+    x_c = np.linalg.inv(K) @ u_hom       # Coordinates in the camera system
 
-    # Paso 2: Calcular r y phi
+    # Step 2: Compute r and phi
     r = np.sqrt((x_c[0]**2 + x_c[1]**2) / x_c[2]**2)
     phi = np.arctan2(x_c[1], x_c[0])
 
-    # Paso 3: Resolver el polinomio para obtener theta usando los coeficientes de D
-    # Polinomio de 9º grado: d(theta) = r
-    # Expresado como: k4 * theta^9 + k3 * theta^7 + k2 * theta^5 + k1 * theta^3 + theta - r = 0
-    coeffs = [D[3], 0, D[2], 0, D[1], 0, D[0], 0, 1, -r]  # Coeficientes del polinomio
-    roots = np.roots(coeffs)                      # Soluciones del polinomio
+    # Step 3: Solve the polynomial to find theta using the coefficients from D
+    # 9th-degree polynomial: d(theta) = r
+    # Expressed as: k4 * theta^9 + k3 * theta^7 + k2 * theta^5 + k1 * theta^3 + theta - r = 0
+    coeffs = [D[3], 0, D[2], 0, D[1], 0, D[0], 0, 1, -r]  # Polynomial coefficients
+    roots = np.roots(coeffs)                             # Solve the polynomial
 
-    # Filtrar soluciones reales
+    # Filter real solutions
     theta_solutions = roots[np.isreal(roots)].real
-    # Seleccionar la única solución positiva (asumimos que es única y válida)
+    # Select the only positive solution (assuming it is unique and valid)
     theta = theta_solutions[theta_solutions >= 0][0]
 
-    # Paso 4: Calcular el vector en la esfera unitaria usando theta y phi
+    # Step 4: Compute the vector on the unit sphere using theta and phi
     v = np.array([
         np.sin(theta) * np.cos(phi),  # x
         np.sin(theta) * np.sin(phi),  # y
@@ -155,6 +156,7 @@ def unproject_kannala_brandt(u, K, D):
     ])
 
     return v
+
 
 # Kannala-Brandt projection model (already defined in the previous code)
 def project_kannala_brandt(X, K, D):
@@ -262,10 +264,6 @@ def triangulate(x1, x2, K1, K2, T_wc1, T_wc2):
     X /= X[3, :]
     return X
   
-  
-  
-  
-  
 
 def plotResidual(x,xProjected,strStyle):
     """
@@ -335,7 +333,7 @@ def drawRefSystem(ax, T_w_c, strStyle, nameStr):
     
 
 
-def resBundleProjectionFishEye(Op, x1Data, x2Data, K_1, K_2, D1_k, D2_k, T_wc1, T_wc2, nPoints):
+def resBundleProjectionFishEye(Op, x1Data, x2Data, x3Data, x4Data, K_1, K_2, D1_k, D2_k, T_wc1, T_wc2, nPoints):
     """
     Calculate reprojection residuals for bundle adjustment with four fish-eye cameras.
     
@@ -367,14 +365,24 @@ def resBundleProjectionFishEye(Op, x1Data, x2Data, K_1, K_2, D1_k, D2_k, T_wc1, 
         x1_proj = project_kannala_brandt(X1[:, i], K_1, D1_k)
 
         # Transform 3D points to camera 2 reference frame
-        X2 = R_21 @ X1[:, i] + t_21
+        X2 = T_wc2[:,:3] @ X1[:, i] + T_wc2[:, 3]
+        X3 = R_21 @ X1[:, i] + t_21
+        X4 = T_wc2[:,:3] @ X3 + T_wc2[:, 3]
 
         # Project 3D points in camera 2
-        x2_proj = project_kannala_brandt(X2, K_2, D2_k)
+        x2_proj = project_kannala_brandt(X2[:, i], K_1, D1_k)
+        # Project 3D points in camera 3
+        x3_proj = project_kannala_brandt(X3[:, i], K_2, D2_k)
 
-        # Compute residuals for both cameras
+
+        # Project 3D points in camera 4
+        x4_proj = project_kannala_brandt(X4[:, i], K_2, D2_k)
+
+        # Compute residuals for all cameras
         residuals.extend((x1_proj[:2] - x1Data[i, :2]).tolist())
         residuals.extend((x2_proj[:2] - x2Data[i, :2]).tolist())
+        residuals.extend((x3_proj[:2] - x3Data[i, :2]).tolist())
+        residuals.extend((x4_proj[:2] - x4Data[i, :2]).tolist())
 
     return np.array(residuals)
   
@@ -412,7 +420,7 @@ def resBundleProjectionFishEye(Op, x1Data, x2Data, K_1, K_2, D1_k, D2_k, T_wc1, 
     return np.array(residuals)
 
 
-def bundle_adjustment_fish_eye(x1Data, x2Data, K_1, K_2, D1_k, D2_k, T_wc1, T_wc2, T_init, X_in):
+def bundle_adjustment_fish_eye(x1Data, x2Data, x3Data, x4Data, K_1, K_2, D1_k, D2_k, T_wc1, T_wc2, T_init, X_in):
     """
     Perform bundle adjustment for fish-eye stereo setup.
     """
@@ -422,7 +430,7 @@ def bundle_adjustment_fish_eye(x1Data, x2Data, K_1, K_2, D1_k, D2_k, T_wc1, T_wc
     # Run least-squares optimization
     result = least_squares(
         resBundleProjectionFishEye, initial_params,
-        args=(x1Data, x2Data, K_1, K_2, D1_k, D2_k, T_wc1, T_wc2, X_in.shape[0]),
+        args=(x1Data, x2Data, x3Data, x4Data, K_1, K_2, D1_k, D2_k, T_wc1, T_wc2, X_in.shape[0]),
         method='trf'
     )
     
@@ -445,9 +453,9 @@ def plotImages(img1, img2, img3, x1Data, x1_p, x1_p_opt, x2Data, x2_p, x2_p_opt,
     # Imagen 1
     plt.figure(4)
     plt.imshow(img1, cmap='gray', vmin=0, vmax=255)
-    plotResidual(x1Data, x1_p, 'k-')  # Residuals originales
+    plotResidual(x1Data, x1_p, 'k-')  # Original residuals
     plt.plot(x1_p[0, :], x1_p[1, :], 'bo', label='Original Projection')
-    plt.plot(x1_p_opt[0, :], x1_p_opt[1, :], 'go', label='Optimized Projection')  # Proyecciones optimizadas
+    plt.plot(x1_p_opt[0, :], x1_p_opt[1, :], 'go', label='Optimized Projection')  # Optimized Projection
     plt.plot(x1Data[0, :], x1Data[1, :], 'rx')
     plotNumberedImagePoints(x1Data[0:2, :], 'r', 4)
     plt.legend()
@@ -507,7 +515,6 @@ def drawSystem(T_wc1, T_wc2, points_3d):
     plotNumbered3DPoints(ax, X_w, 'r', 0.1)
     plotNumbered3DPoints(ax, X_opt, 'g', 0.1)
 
-    #Matplotlib does not correctly manage the axis('equal')
     xFakeBoundingBox = np.linspace(0, 4, 2)
     yFakeBoundingBox = np.linspace(0, 4, 2)
     zFakeBoundingBox = np.linspace(0, 4, 2)

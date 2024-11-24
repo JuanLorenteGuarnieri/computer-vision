@@ -84,10 +84,10 @@ def main():
     print("Unprojected X2:", X2_unproj)
     print("Unprojected X3:", X3_unproj)
 
-    # Optionally, compare the unprojected 3D points with the original ones
-    # print("Difference for X1:", np.linalg.norm(X1_unproj - X1))
-    # print("Difference for X2:", np.linalg.norm(X2_unproj - X2))
-    # print("Difference for X3:", np.linalg.norm(X3_unproj - X3))
+    # Compare the unprojected 3D points with the original ones
+    print("Difference for X1:", np.linalg.norm(X1_unproj - X1))
+    print("Difference for X2:", np.linalg.norm(X2_unproj - X2))
+    print("Difference for X3:", np.linalg.norm(X3_unproj - X3))
 
     # Perform triangulation for each pair of points
     # X = triangulate(x1, x2, K1, K2, T_wc1, T_wc2)
@@ -98,7 +98,7 @@ def main():
     # Plot camera axes
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    utils.plot_stereo_camera_axis(ax, T_wc1, T_wc1, T_wc2, 'R0')
+    utils.plot_stereo_camera_axis(ax, np.eye(4), T_wc1, T_wc2, 'R0')
     plt.show()
 
     # Triangulate 3D points
@@ -107,15 +107,15 @@ def main():
 
     print("3D points:\n", points_3d)
     
-    # Create the figure and system references.
+    # Create the figure and system references and plot the 3D points.
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    pd.drawRefSystem(ax, np.eye(4), '-', 'W')   # World.
-    pd.drawRefSystem(ax, T_wc1, '-', 'C1')     # Camera 1.
-    pd.drawRefSystem(ax, T_wc2, '-', 'C2')     # Camera 2.
-
-    # Plot the points over the figure.
-    ax.scatter(points_3d[:, 0], points_3d[:, 1], points_3d[:, 2], c='r', label='Computed', marker='o')
+    utils.plot_stereo_camera_axis(ax, np.eye(4), T_wc1, T_wc2, 'R0')
+    ax.scatter(points_3d[:, 0], points_3d[:, 1], points_3d[:, 2], c='g', label='Computed', marker='x')
+    pd.plotNumbered3DPoints(ax, points_3d.T, 'r', (0, 0, 0))
+    ax.set_xlim(-1, 1)
+    ax.set_ylim(-1, 1)
+    ax.set_zlim(-1, 1)
     plt.show()
 
     from scipy.linalg import expm, logm
@@ -129,7 +129,7 @@ def main():
 
     # Run bundle adjustment for fisheye
     T_opt, X_opt = utils.bundle_adjustment_fish_eye(
-        x1, x2, K1, K2, D1, D2, T_wc1, T_wc2, T_init, points_3d
+        x1, x2, x3, x4, K1, K2, D1, D2, T_wc1, T_wc2, T_init, points_3d
     )
 
     # Update 3D points with optimized results

@@ -73,7 +73,7 @@ def plotLabelled3DPoints(ax, X, labels, strColor, offset):
     for k in range(X.shape[1]):
         ax.text(X[0, k]+offset[0], X[1, k]+offset[1], X[2,k]+offset[2], labels[k], color=strColor)
 
-def plotNumbered3DPoints(ax, X,strColor, offset):
+def plotNumbered3DPoints(ax, X, strColor, offset):
     """
         Plot indexes of points on a 3D plot.
          -input:
