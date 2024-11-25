@@ -85,9 +85,9 @@ def main():
     print("Unprojected X3:", X3_unproj)
 
     # Compare the unprojected 3D points with the original ones
-    print("Difference for X1:", np.linalg.norm(X1_unproj - X1))
-    print("Difference for X2:", np.linalg.norm(X2_unproj - X2))
-    print("Difference for X3:", np.linalg.norm(X3_unproj - X3))
+    print("Difference for X1:", np.linalg.norm(X1_unproj - x1_normalized))
+    print("Difference for X2:", np.linalg.norm(X2_unproj - x2_normalized))
+    print("Difference for X3:", np.linalg.norm(X3_unproj - x3_normalized))
 
     # Perform triangulation for each pair of points
     # X = triangulate(x1, x2, K1, K2, T_wc1, T_wc2)
@@ -95,17 +95,11 @@ def main():
     # Print the triangulated 3D point
     # print("Triangulated 3D point:", X)
 
-    # Plot camera axes
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    utils.plot_stereo_camera_axis(ax, np.eye(4), T_wc1, T_wc2, 'R0')
-    plt.show()
-
     # Triangulate 3D points
     points_3d = utils.triangulate_points(x1, x2, K1, D1, K2, D2, T_wc1, T_wc2)
     # points_3d = triangulate(x1, x2, K1, K2, T_wc1, T_wc2)
 
-    print("3D points:\n", points_3d)
+    # print("3D points:\n", points_3d)
     
     # Create the figure and system references and plot the 3D points.
     fig = plt.figure()

@@ -165,3 +165,111 @@ if __name__ == '__main__':
     axs[1, 2].set_axis_off()
     fig.subplots_adjust(hspace=0.5)
     plt.show()
+    
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from scipy.interpolate import RectBivariateSpline
+
+    # Import your NCC and Lucas-Kanade functions
+    from NCCTemplate import seed_estimation_NCC_single_point, lucas_kanade_sparse_optical_flow
+
+    # Load images
+    img1_gray = cv.cvtColor(img1, cv.COLOR_RGB2GRAY)
+    img2_gray = cv.cvtColor(img2, cv.COLOR_RGB2GRAY)
+
+
+    # Parameters
+    template_size_half = 5  # Template size for NCC (10x10 total)
+    searching_area_size = 20  # Search area for NCC
+    window_size = 11  # Window size for Lucas-Kanade
+
+    # Initialize storage for optical flow vectors
+    initial_u = []
+    initial_v = []
+    refined_u = []
+    refined_v = []
+
+    # Process each point
+    for x, y in points_selected:
+        # Compute initial optical flow using NCC (Section 2.1)
+        u_ncc, v_ncc = seed_estimation_NCC_single_point(
+            img1_gray, img2_gray, int(y), int(x), template_size_half, searching_area_size
+        )
+        initial_u.append(u_ncc)
+        initial_v.append(v_ncc)
+
+        # Refine optical flow using Lucas-Kanade (Section 2.2)
+        u_refined, v_refined = lucas_kanade_sparse_optical_flow(
+            img1_gray, img2_gray, u_ncc, v_ncc, window_size=window_size
+        )
+        refined_u.append(u_refined)
+        refined_v.append(v_refined)
+
+    # Convert to arrays
+    initial_u = np.array(initial_u)
+    initial_v = np.array(initial_v)
+    refined_u = np.array(refined_u)
+    refined_v = np.array(refined_v)
+    
+    flow_est = np.zeros_like(flow_12)
+    for i, (x, y) in enumerate(points_selected[:, :2].astype(int)):
+        flow_est[y, x, 0] = refined_u[i]
+        flow_est[y, x, 1] = refined_v[i]
+        
+    
+    ## Sparse optical flow
+    flow_gt = flow_12[points_selected[:, 1].astype(int), points_selected[:, 0].astype(int)].astype(float)
+    flow_est_sparse = flow_est[points_selected[:, 1].astype(int), points_selected[:, 0].astype(int)]
+    flow_est_sparse_norm = np.sqrt(np.sum(flow_est_sparse ** 2, axis=1))
+    error_sparse = flow_est_sparse - flow_gt
+    error_sparse_norm = np.sqrt(np.sum(error_sparse ** 2, axis=1))
+
+
+    # Visualization
+    plt.figure(figsize=(10, 10))
+    plt.imshow(img1_gray, cmap='gray')
+    plt.quiver(points_selected[:, 0], points_selected[:, 1], initial_u, initial_v, color='red', label='NCC Flow', angles='xy', scale_units='xy', scale=1)
+    plt.quiver(points_selected[:, 0], points_selected[:, 1], refined_u, refined_v, color='blue', label='Refined Flow (Lucas-Kanade)', angles='xy', scale_units='xy', scale=1)
+    plt.title('Optical Flow (NCC + Lucas-Kanade)')
+    plt.legend()
+    plt.show()
+    
+    # Plot results for sparse optical flow
+    fig, axs = plt.subplots(1, 2)
+    axs[0].imshow(img1)
+    axs[0].plot(points_selected[:, 0], points_selected[:, 1], '+r', markersize=15)
+    for k in range(points_selected.shape[0]):
+        axs[0].text(points_selected[k, 0] + 5, points_selected[k, 1] + 5, '{:.2f}'.format(flow_est_sparse_norm[k]), color='r')
+    axs[0].quiver(points_selected[:, 0], points_selected[:, 1], flow_est_sparse[:, 0], flow_est_sparse[:, 1], color='b', angles='xy', scale_units='xy', scale=0.05)
+    axs[0].title.set_text('Optical flow')
+    axs[1].imshow(img1)
+    axs[1].plot(points_selected[:, 0], points_selected[:, 1], '+r', markersize=15)
+    for k in range(points_selected.shape[0]):
+        axs[1].text(points_selected[k, 0] + 5, points_selected[k, 1] + 5, '{:.2f}'.format(error_sparse_norm[k]),
+                    color='r')
+    axs[1].quiver(points_selected[:, 0], points_selected[:, 1], error_sparse[:, 0], error_sparse[:, 1], color='b',
+               angles='xy', scale_units='xy', scale=0.05)
+
+    axs[1].title.set_text('Error with respect to GT')
+    plt.show()
+    
+    # Plot results for dense optical flow
+    scale = 40
+    wheelFlow = generate_wheel(256)
+    fig, axs = plt.subplots(2, 3)
+    axs[0, 0].imshow(img1)
+    axs[0, 0].title.set_text('image 1')
+    axs[1, 0].imshow(img2)
+    axs[1, 0].title.set_text('image 2')
+    axs[0, 1].imshow(draw_hsv(flow_12 * np.bitwise_not(binUnknownFlow), scale))
+    axs[0, 1].title.set_text('Optical flow ground truth')
+    axs[1, 1].imshow(draw_hsv(flow_est, scale))
+    axs[1, 1].title.set_text('LK estimated optical flow ')
+    axs[0, 2].imshow(error_norm, cmap='jet')
+    axs[0, 2].title.set_text('Optical flow error norm')
+    axs[1, 2].imshow(draw_hsv(wheelFlow, 3))
+    axs[1, 2].title.set_text('Color legend')
+    axs[1, 2].set_axis_off()
+    fig.subplots_adjust(hspace=0.5)
+    plt.show()
+
