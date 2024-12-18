@@ -104,7 +104,6 @@ if __name__ == '__main__':
     img1 = read_image("frame10.png")
     img2 = read_image("frame11.png")
 
-
     # Adding random noise to the gt optical flow for plotting example
     flow_est = flow_12 * np.bitwise_not(binUnknownFlow) + np.random.rand(flow_12.shape[0], flow_12.shape[1], flow_12.shape[2]) * 1.2 - 0.6
 
@@ -199,11 +198,11 @@ if __name__ == '__main__':
         initial_v.append(v_ncc)
 
         # Refine optical flow using Lucas-Kanade (Section 2.2)
-        u_refined, v_refined = lucas_kanade_sparse_optical_flow(
-            img1_gray, img2_gray, u_ncc, v_ncc, window_size=window_size
+        u_refined = lucas_kanade_sparse_optical_flow(
+            img1_gray, img2_gray, [u_ncc, v_ncc], window_size=window_size
         )
-        refined_u.append(u_refined)
-        refined_v.append(v_refined)
+        refined_u.append(u_refined[0])
+        refined_v.append(u_refined[1])
 
     # Convert to arrays
     initial_u = np.array(initial_u)
@@ -227,7 +226,7 @@ if __name__ == '__main__':
 
     # Visualization
     plt.figure(figsize=(10, 10))
-    plt.imshow(img1_gray, cmap='gray')
+    plt.imshow(img2_gray, cmap='gray')
     plt.quiver(points_selected[:, 0], points_selected[:, 1], initial_u, initial_v, color='red', label='NCC Flow', angles='xy', scale_units='xy', scale=1)
     plt.quiver(points_selected[:, 0], points_selected[:, 1], refined_u, refined_v, color='blue', label='Refined Flow (Lucas-Kanade)', angles='xy', scale_units='xy', scale=1)
     plt.title('Optical Flow (NCC + Lucas-Kanade)')
