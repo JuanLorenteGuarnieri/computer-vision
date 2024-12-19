@@ -202,13 +202,33 @@ if __name__ == '__main__':
     img1 = read_image("frame10.png")
     img2 = read_image("frame11.png")
 
-    # Adding random noise to the gt optical flow for plotting example
-    flow_est = flow_12 * np.bitwise_not(binUnknownFlow) + np.random.rand(flow_12.shape[0], flow_12.shape[1], flow_12.shape[2]) * 1.2 - 0.6
-
-
     # List of sparse points
     points_selected = np.loadtxt('points_selected.txt')
+    
+    # Load images
+    img1_gray = cv.cvtColor(img1, cv.COLOR_RGB2GRAY)
+    img2_gray = cv.cvtColor(img2, cv.COLOR_RGB2GRAY)
 
+
+    # Parameters
+    template_size_half = 5  # Template size for NCC (10x10 total)
+    searching_area_size = 20  # Search area for NCC
+
+    # Process each point
+    seed_optical_flow_sparse = np.zeros((points_selected.shape))
+    for k in range(0,points_selected.shape[0]):
+        i_flow, j_flow = seed_estimation_NCC_single_point(img1_gray, img2_gray, int(points_selected[k,1]), int(points_selected[k,0]), template_size_half, searching_area_size)
+        seed_optical_flow_sparse[k,:] = np.hstack((j_flow,i_flow))
+
+    refined_u = lucas_kanade_sparse_optical_flow(
+            img1_gray, img2_gray, points_selected, seed_optical_flow_sparse
+        )
+    flow_est = np.zeros_like(flow_12)
+    for i, (x, y) in enumerate(points_selected[:, :2].astype(int)):
+        flow_est[y, x, 0] = refined_u[i, 0]
+        flow_est[y, x, 1] = refined_u[i, 1]
+        
+    
     ## Sparse optical flow
     flow_gt = flow_12[points_selected[:, 1].astype(int), points_selected[:, 0].astype(int)].astype(float)
     flow_est_sparse = flow_est[points_selected[:, 1].astype(int), points_selected[:, 0].astype(int)]
@@ -217,15 +237,22 @@ if __name__ == '__main__':
     error_sparse_norm = np.sqrt(np.sum(error_sparse ** 2, axis=1))
 
 
+    # Visualization
+    plt.figure(figsize=(10, 10))
+    plt.imshow(img2_gray, cmap='gray')
+    plt.quiver(points_selected[:, 0], points_selected[:, 1], seed_optical_flow_sparse[:, 0], seed_optical_flow_sparse[:, 1], color='red', label='NCC Flow', angles='xy', scale_units='xy', scale=1)
+    plt.quiver(points_selected[:, 0], points_selected[:, 1], refined_u[:, 0], refined_u[:, 1], color='blue', label='Refined Flow (Lucas-Kanade)', angles='xy', scale_units='xy', scale=1)
+    plt.title('Optical Flow (NCC + Lucas-Kanade)')
+    plt.legend()
+    plt.show()
+
     # Plot results for sparse optical flow
     plot_sparse_optical_flow(img1, points_selected, flow_est_sparse, error_sparse, flow_est_sparse_norm, error_sparse_norm)
-
 
     ## Dense optical flow
     flow_error = flow_est - flow_12
     flow_error[binUnknownFlow] = 0
     error_norm = np.sqrt(np.sum(flow_error ** 2, axis=-1))
-
 
     # Plot results for dense optical flow
     plot_dense_optical_flow(img1, img2, flow_12, flow_est, flow_error, error_norm, scale=40)
